@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rei Automator</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <!-- ヘッダー -->
+    <header class="header">
+      <h1>Rei Automator</h1>
+      <span class="version">v0.1.0</span>
+    </header>
+
+    <!-- ツールバー -->
+    <div class="toolbar">
+      <button id="btn-capture" class="toolbar-btn" title="画面をキャプチャ" disabled>
+        📷 キャプチャ
+      </button>
+      <button id="btn-target" class="toolbar-btn" title="座標を指定" disabled>
+        🎯 座標指定
+      </button>
+      <div class="toolbar-separator"></div>
+      <button id="btn-open" class="toolbar-btn" title="スクリプトを開く">
+        📂 開く
+      </button>
+      <button id="btn-save" class="toolbar-btn" title="スクリプトを保存">
+        💾 保存
+      </button>
+    </div>
+
+    <!-- 日本語入力セクション -->
+    <div class="section">
+      <div class="section-header">
+        <label for="japanese-input">日本語入力:</label>
+        <button id="btn-convert" class="btn-small" disabled>
+          🔄 コード生成
+        </button>
+      </div>
+      <textarea 
+        id="japanese-input" 
+        class="input-area" 
+        placeholder="例：サインが出たら3秒後にクリック、2秒後にもう一つクリック、繰り返す"
+        disabled
+      ></textarea>
+    </div>
+
+    <!-- Reiコードセクション -->
+    <div class="section">
+      <div class="section-header">
+        <label for="rei-code">Reiコード:</label>
+      </div>
+      <textarea 
+        id="rei-code" 
+        class="code-area" 
+        placeholder="// Reiコードを記述してください&#10;// 例：&#10;click(100, 200)&#10;wait(3s)&#10;type(&quot;Hello&quot;)"
+        spellcheck="false"
+      ></textarea>
+    </div>
+
+    <!-- キャプチャ素材セクション -->
+    <div class="section captures-section" style="display: none;">
+      <div class="section-header">
+        <label>キャプチャ済み素材:</label>
+      </div>
+      <div id="captures-container" class="captures-container">
+        <!-- キャプチャした素材がここに表示される -->
+      </div>
+    </div>
+
+    <!-- 実行コントロール -->
+    <div class="controls">
+      <button id="btn-execute" class="btn-primary">
+        ▶ 実行
+      </button>
+      <button id="btn-stop" class="btn-danger" disabled>
+        ⏹ 停止
+      </button>
+      <button id="btn-pause" class="btn-secondary" disabled>
+        ⏸ 一時停止
+      </button>
+      <div class="status">
+        <span class="status-label">ステータス:</span>
+        <span id="status-text" class="status-text">待機中</span>
+      </div>
+    </div>
+
+    <!-- フッター -->
+    <footer class="footer">
+      <div class="footer-left">
+        Powered by <strong>Rei Language</strong>
+      </div>
+      <div class="footer-right">
+        © 2024-2026 Nobuki Fujimoto
+      </div>
+    </footer>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>
