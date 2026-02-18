@@ -37,6 +37,10 @@ import {
   ClickFoundCommand,
   WaitFindCommand,
   FindClickCommand,
+  // Phase 5: 条件分岐・OCR
+  IfCommand,
+  ReadCommand,
+  IfCondition,
 } from './types';
 
 /**
@@ -131,6 +135,44 @@ function parseBlock(
       } as LoopCommand);
 
       i = bodyStartIndex + bodyLines;
+      continue;
+    }
+
+    // ── Phase 5: if文の判定 ────────────────────────────────
+    const ifCondition = parseIfCondition(trimmed, lineNum, errors);
+    if (ifCondition !== null) {
+      const thenStartIndex = i + 1;
+      const blockIndent = indentLevel + 1;
+      const thenBlock = parseBlock(lines, thenStartIndex, blockIndent, errors);
+      const thenLines = countBlockLines(lines, thenStartIndex, blockIndent);
+      let nextIndex = thenStartIndex + thenLines;
+      let elseBlock: ReiCommand[] | null = null;
+
+      // else: を探す（同じインデントレベルで次に来る行）
+      while (nextIndex < lines.length) {
+        const elseRaw = lines[nextIndex];
+        const elseTrimmed = elseRaw.trim();
+        if (elseTrimmed === '') { nextIndex++; continue; }
+        const elseIndent = getIndentLevel(elseRaw);
+        if (elseIndent < indentLevel) break; // 親ブロック終了
+        if (elseIndent === indentLevel && elseTrimmed === 'else:') {
+          const elseStartIndex = nextIndex + 1;
+          elseBlock = parseBlock(lines, elseStartIndex, blockIndent, errors);
+          const elseLines = countBlockLines(lines, elseStartIndex, blockIndent);
+          nextIndex = elseStartIndex + elseLines;
+        }
+        break;
+      }
+
+      commands.push({
+        type: 'if',
+        condition: ifCondition,
+        thenBlock,
+        elseBlock,
+        line: lineNum,
+      } as IfCommand);
+
+      i = nextIndex;
       continue;
     }
 
@@ -315,6 +357,21 @@ function parseCommand(
     } as FindClickCommand;
   }
 
+  // ── Phase 5: read(x, y, width, height) ────────────────
+  const readMatch = line.match(
+    /^read\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)$/
+  );
+  if (readMatch) {
+    return {
+      type: 'read' as const,
+      x: parseInt(readMatch[1], 10),
+      y: parseInt(readMatch[2], 10),
+      width: parseInt(readMatch[3], 10),
+      height: parseInt(readMatch[4], 10),
+      line: lineNum,
+    } as ReadCommand;
+  }
+
   // 不明なコマンド
   errors.push({
     message: `不明なコマンドです: "${line}"（行 ${lineNum}）`,
@@ -363,4 +420,71 @@ function countBlockLines(
     count++;
   }
   return count;
+}
+
+// ── Phase 5: if文条件パーサー ──────────────────────────────
+
+/**
+ * if行の条件部分を解析して IfCondition を返す。
+ * if 文でなければ null を返す。
+ *
+ * サポート構文:
+ *   if found:
+ *   if not found:
+ *   if text == "value":
+ *   if text != "value":
+ *   if text contains "value":
+ *   if text not contains "value":
+ */
+function parseIfCondition(
+  line: string,
+  lineNum: number,
+  errors: ParseError[]
+): IfCondition | null {
+  // if で始まり : で終わる行か
+  const ifMatch = line.match(/^if\s+(.+):\s*$/);
+  if (!ifMatch) return null;
+
+  const condPart = ifMatch[1].trim();
+
+  // if found:
+  if (condPart === 'found') {
+    return { type: 'found' };
+  }
+
+  // if not found:
+  if (condPart === 'not found') {
+    return { type: 'not_found' };
+  }
+
+  // if text == "value":
+  const eqMatch = condPart.match(/^text\s*==\s*"([^"]*)"$/);
+  if (eqMatch) {
+    return { type: 'text_eq', value: eqMatch[1] };
+  }
+
+  // if text != "value":
+  const neMatch = condPart.match(/^text\s*!=\s*"([^"]*)"$/);
+  if (neMatch) {
+    return { type: 'text_ne', value: neMatch[1] };
+  }
+
+  // if text contains "value":
+  const containsMatch = condPart.match(/^text\s+contains\s+"([^"]*)"$/);
+  if (containsMatch) {
+    return { type: 'text_contains', value: containsMatch[1] };
+  }
+
+  // if text not contains "value":
+  const notContainsMatch = condPart.match(/^text\s+not\s+contains\s+"([^"]*)"$/);
+  if (notContainsMatch) {
+    return { type: 'text_not_contains', value: notContainsMatch[1] };
+  }
+
+  // 構文エラー
+  errors.push({
+    message: `不正な if 条件です: "${condPart}"（行 ${lineNum}）。サポート: found, not found, text == "...", text != "...", text contains "..."`,
+    line: lineNum,
+  });
+  return { type: 'found' }; // フォールバック（エラーは上で追加済み）
 }

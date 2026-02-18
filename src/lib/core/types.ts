@@ -21,7 +21,10 @@ export type ReiCommand =
   | FindCommand
   | ClickFoundCommand
   | WaitFindCommand
-  | FindClickCommand;
+  | FindClickCommand
+  // Phase 5: 条件分岐・OCR
+  | IfCommand
+  | ReadCommand;
 
 export interface ClickCommand {
   type: 'click';
@@ -141,6 +144,50 @@ export interface FindState {
   centerY: number;
   confidence: number;
   template: string;
+}
+
+// ========== Phase 5: 条件分岐・OCR ==========
+
+/**
+ * if文の条件式
+ */
+export type IfCondition =
+  | { type: 'found' }                          // if found:
+  | { type: 'not_found' }                      // if not found:
+  | { type: 'text_eq'; value: string }         // if text == "..."
+  | { type: 'text_ne'; value: string }         // if text != "..."
+  | { type: 'text_contains'; value: string }   // if text contains "..."
+  | { type: 'text_not_contains'; value: string }; // if text not contains "..."
+
+/**
+ * if 文
+ *   if found:
+ *     click(found)
+ *   else:
+ *     wait(1000)
+ *
+ *   if text == "完了":
+ *     click(400, 300)
+ */
+export interface IfCommand {
+  type: 'if';
+  condition: IfCondition;
+  thenBlock: ReiCommand[];
+  elseBlock: ReiCommand[] | null;
+  line: number;
+}
+
+/**
+ * read(x, y, width, height)
+ * 指定領域をOCRで読み取り、内部変数 `text` に格納
+ */
+export interface ReadCommand {
+  type: 'read';
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  line: number;
 }
 
 // ========== プログラム ==========
