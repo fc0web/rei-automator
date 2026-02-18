@@ -1,0 +1,38 @@
+<!-- ============================================================
+  Phase 4 index.html 追加
+  ============================================================ -->
+
+<!-- A) キャプチャモーダルのボタン群に追加（座標指定モードボタンの隣） -->
+<!--
+  <button id="btn-template-mode" class="capture-btn" title="テンプレート切り出しモード">
+    テンプレート作成
+  </button>
+-->
+
+<!-- B) テンプレート名入力ダイアログ（キャプチャモーダル内に追加） -->
+  <div id="template-name-dialog" class="template-dialog" style="display: none;">
+    <div class="template-dialog-content">
+      <h3>テンプレート名を入力</h3>
+      <input type="text" id="template-name-input"
+             placeholder="例: ok-button"
+             class="template-name-input" />
+      <div class="template-dialog-preview">
+        <canvas id="template-preview-canvas"></canvas>
+      </div>
+      <div class="template-dialog-buttons">
+        <button id="btn-template-save" class="btn-primary">保存</button>
+        <button id="btn-template-cancel" class="btn-secondary">キャンセル</button>
+      </div>
+    </div>
+  </div>
+
+<!-- C) テンプレート管理パネル（メインUIに追加） -->
+  <div id="template-panel" class="template-panel">
+    <div class="template-panel-header">
+      <h3>テンプレート一覧</h3>
+      <button id="btn-refresh-templates" class="btn-small" title="更新">更新</button>
+    </div>
+    <div id="template-list" class="template-list">
+      テンプレートなし
+    </div>
+  </div>

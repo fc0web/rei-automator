@@ -1,0 +1,83 @@
+<!--
+  index-phase4-additions.html — Phase 4で index.html に追加するUI要素
+
+  【統合方法】
+  1. キャプチャモーダル内に「テンプレート選択モード」ボタンを追加
+  2. テンプレート管理パネルを追加
+  3. テンプレートコード挿入UIを追加
+
+  ※ 以下のHTML断片を適切な位置に追加してください
+-->
+
+<!-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  A) キャプチャモーダル内のボタン群に追加
+     既存の「座標指定モード」ボタンの隣に配置
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
+
+<!--
+  <button id="btn-template-mode" class="capture-btn" title="テンプレート切り出しモード">
+    📋 テンプレート作成
+  </button>
+-->
+
+
+<!-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  B) テンプレート名入力ダイアログ（モーダル内に追加）
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
+
+<!--
+  <div id="template-name-dialog" class="template-dialog" style="display: none;">
+    <div class="template-dialog-content">
+      <h3>テンプレート名を入力</h3>
+      <input type="text" id="template-name-input"
+             placeholder="例: ok-button"
+             class="template-name-input" />
+      <div class="template-dialog-preview">
+        <canvas id="template-preview-canvas"></canvas>
+      </div>
+      <div class="template-dialog-buttons">
+        <button id="btn-template-save" class="btn-primary">保存</button>
+        <button id="btn-template-cancel" class="btn-secondary">キャンセル</button>
+      </div>
+    </div>
+  </div>
+-->
+
+
+<!-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  C) テンプレート管理パネル（メインUI内、エディタの隣または下に配置）
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
+
+<!--
+  <div id="template-panel" class="template-panel">
+    <div class="template-panel-header">
+      <h3>📋 テンプレート一覧</h3>
+      <button id="btn-refresh-templates" class="btn-small" title="更新">🔄</button>
+    </div>
+    <div id="template-list" class="template-list">
+      ここにテンプレート一覧が表示されます
+    </div>
+  </div>
+-->
+
+
+<!-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  D) テンプレートリストの1アイテム（renderer.ts で動的生成）
+     参考用テンプレート
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
+
+<!--
+  <div class="template-item" data-name="ok-button.png">
+    <img class="template-thumb" src="data:image/png;base64,..." alt="ok-button" />
+    <div class="template-info">
+      <span class="template-name">ok-button.png</span>
+      <span class="template-size">32×24</span>
+    </div>
+    <div class="template-actions">
+      <button class="btn-insert-find" title="find()を挿入">🔍</button>
+      <button class="btn-insert-find-click" title="find_click()を挿入">🖱️</button>
+      <button class="btn-test-match" title="マッチングテスト">🧪</button>
+      <button class="btn-delete-template" title="削除">🗑️</button>
+    </div>
+  </div>
+-->
