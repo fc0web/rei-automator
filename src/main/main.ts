@@ -9,11 +9,13 @@ import { ReiExecutor } from './executor';
 import { FileManager } from './file-manager';
 import { ScreenCapture } from './screen-capture';
 import { convertJapaneseToRei, convertWithClaudeAPI } from '../lib/core/converter';
+import { ImageMatcher } from '../lib/auto/image-matcher';
 
 let mainWindow: BrowserWindow | null = null;
 let executor: ReiExecutor | null = null;
 let fileManager: FileManager | null = null;
 let screenCapture: ScreenCapture | null = null;
+let imageMatcher: ImageMatcher | null = null;
 
 /**
  * メインウィンドウを作成
@@ -196,6 +198,87 @@ function setupIpcHandlers(): void {
     if (!screenCapture) return { success: false };
     return screenCapture.loadCapture(filename);
   });
+
+  // ── Phase 4: テンプレート管理 IPC ─────────────────────
+
+  ipcMain.handle('template:create', async (_event, args: {
+    sourcePath: string;
+    region: { x: number; y: number; width: number; height: number };
+    name: string;
+  }) => {
+    try {
+      if (!imageMatcher) return { success: false, error: '未初期化' };
+      const info = await imageMatcher.createTemplate(args.sourcePath, args.region, args.name);
+      return { success: true, template: info };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('template:create-from-base64', async (_event, args: {
+    base64: string;
+    region: { x: number; y: number; width: number; height: number };
+    name: string;
+  }) => {
+    try {
+      if (!imageMatcher) return { success: false, error: '未初期化' };
+      const buffer = Buffer.from(args.base64, 'base64');
+      const info = await imageMatcher.createTemplateFromBuffer(buffer, args.region, args.name);
+      return { success: true, template: info };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('template:list', async () => {
+    try {
+      if (!imageMatcher) return { success: false, error: '未初期化', templates: [] };
+      const templates = await imageMatcher.listTemplates();
+      return { success: true, templates };
+    } catch (error: any) {
+      return { success: false, error: error.message, templates: [] };
+    }
+  });
+
+  ipcMain.handle('template:delete', async (_event, name: string) => {
+    try {
+      if (!imageMatcher) return { success: false, error: '未初期化' };
+      const deleted = imageMatcher.deleteTemplate(name);
+      return { success: true, deleted };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('template:test-match', async (_event, args: {
+    screenshotPath: string;
+    templateName: string;
+    threshold?: number;
+  }) => {
+    try {
+      if (!imageMatcher) return { success: false, error: '未初期化' };
+      const result = await imageMatcher.findTemplate(
+        args.screenshotPath, args.templateName, { threshold: args.threshold }
+      );
+      return { success: true, result };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('template:get-preview', async (_event, name: string) => {
+    try {
+      const fs = require('fs');
+      const templatesDir = path.join(app.getAppPath(), '..', 'templates');
+      const safeName = name.endsWith('.png') ? name : `${name}.png`;
+      const filePath = path.join(templatesDir, safeName);
+      if (!fs.existsSync(filePath)) return { success: false, error: 'テンプレートが見つかりません' };
+      const buffer = fs.readFileSync(filePath);
+      return { success: true, base64: buffer.toString('base64'), name: safeName };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  });
 }
 
 // アプリ起動
@@ -204,6 +287,19 @@ app.whenReady().then(() => {
   executor = new ReiExecutor(useStub);
   fileManager = new FileManager();
   screenCapture = new ScreenCapture();
+
+  // Phase 4: ImageMatcher 初期化
+  const templatesDir = path.join(app.getAppPath(), '..', 'templates');
+  imageMatcher = new ImageMatcher(templatesDir);
+  // runtime に注入（executor経由）
+  if (executor && screenCapture) {
+    executor.setImageMatcher(imageMatcher);
+    executor.setCaptureFunc(async () => {
+      const r = await screenCapture!.captureAndSave();
+      if (!r.success || !r.savedPath) throw new Error('キャプチャ失敗');
+      return r.savedPath;
+    });
+  }
 
   setupIpcHandlers();
   createMainWindow();

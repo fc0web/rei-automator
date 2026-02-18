@@ -70,7 +70,9 @@ function initialize() {
   setupEventListeners();
   setupExecutionListeners();
   setupCaptureListeners();
-  console.log('Rei Automator v0.3 initialized');
+  initTemplateMode();       // Phase 4: テンプレート管理
+  refreshTemplateList();    // Phase 4: 起動時に一覧を読み込む
+  console.log('Rei Automator v0.4 initialized');
 }
 
 // ========== イベントリスナー ==========
@@ -650,4 +652,227 @@ if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', initialize);
 } else {
   initialize();
+}
+
+// ========== Phase 4: テンプレート管理 ==========
+
+let isTemplateMode = false;
+let templateDragStart: { x: number; y: number } | null = null;
+let templateSelection: { x: number; y: number; w: number; h: number } | null = null;
+let lastCaptureBase64: string | null = null;
+
+function initTemplateMode(): void {
+  const btnTemplateMode = document.getElementById('btn-template-mode');
+  const captureImg = document.getElementById('capture-image') as HTMLImageElement | null;
+
+  if (!btnTemplateMode || !captureImg) return;
+
+  btnTemplateMode.addEventListener('click', () => {
+    isTemplateMode = !isTemplateMode;
+    btnTemplateMode.classList.toggle('active', isTemplateMode);
+    captureImg.classList.toggle('template-mode', isTemplateMode);
+    clearTemplateSelection();
+    if (isTemplateMode) {
+      appendLog('テンプレート作成モード: 画像上でドラッグして範囲を選択');
+    }
+  });
+
+  captureImg.addEventListener('mousedown', (e) => {
+    if (!isTemplateMode) return;
+    e.preventDefault();
+    const rect = captureImg.getBoundingClientRect();
+    templateDragStart = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    clearTemplateSelection();
+  });
+
+  captureImg.addEventListener('mousemove', (e) => {
+    if (!isTemplateMode || !templateDragStart) return;
+    const rect = captureImg.getBoundingClientRect();
+    const cx = e.clientX - rect.left;
+    const cy = e.clientY - rect.top;
+    const x = Math.min(templateDragStart.x, cx);
+    const y = Math.min(templateDragStart.y, cy);
+    const w = Math.abs(cx - templateDragStart.x);
+    const h = Math.abs(cy - templateDragStart.y);
+    showSelectionOverlay(x, y, w, h);
+    templateSelection = { x, y, w, h };
+  });
+
+  captureImg.addEventListener('mouseup', () => {
+    if (!isTemplateMode || !templateDragStart) return;
+    templateDragStart = null;
+    if (templateSelection && templateSelection.w > 5 && templateSelection.h > 5) {
+      showTemplateNameDialog();
+    } else {
+      clearTemplateSelection();
+    }
+  });
+
+  // テンプレート名ダイアログのボタン
+  document.getElementById('btn-save-template')?.addEventListener('click', async () => {
+    const nameInput = document.getElementById('template-name-input') as HTMLInputElement;
+    if (nameInput && nameInput.value.trim()) {
+      await saveTemplate(nameInput.value.trim());
+    }
+  });
+
+  document.getElementById('btn-cancel-template')?.addEventListener('click', () => {
+    hideTemplateNameDialog();
+    clearTemplateSelection();
+  });
+}
+
+function showSelectionOverlay(x: number, y: number, w: number, h: number): void {
+  let overlay = document.getElementById('template-selection-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'template-selection-overlay';
+    document.getElementById('capture-image')?.parentElement?.appendChild(overlay);
+  }
+  overlay.style.cssText = `
+    position: absolute; border: 2px dashed #f00;
+    background: rgba(255,0,0,0.1); pointer-events: none;
+    left: ${x}px; top: ${y}px; width: ${w}px; height: ${h}px; display: block;
+  `;
+}
+
+function clearTemplateSelection(): void {
+  const overlay = document.getElementById('template-selection-overlay');
+  if (overlay) overlay.style.display = 'none';
+  templateSelection = null;
+}
+
+function showTemplateNameDialog(): void {
+  const dialog = document.getElementById('template-name-dialog');
+  const nameInput = document.getElementById('template-name-input') as HTMLInputElement;
+  if (!dialog || !nameInput) return;
+  nameInput.value = `template-${String(Date.now()).slice(-4)}`;
+  dialog.style.display = 'flex';
+  nameInput.focus();
+  nameInput.select();
+}
+
+function hideTemplateNameDialog(): void {
+  const dialog = document.getElementById('template-name-dialog');
+  if (dialog) dialog.style.display = 'none';
+}
+
+async function saveTemplate(name: string): Promise<void> {
+  if (!templateSelection || !lastCaptureBase64) {
+    appendLog('エラー: キャプチャデータがありません');
+    return;
+  }
+  try {
+    const result = await (window as any).electronAPI.templateCreateFromBase64({
+      base64: lastCaptureBase64,
+      region: { x: templateSelection.x, y: templateSelection.y, width: templateSelection.w, height: templateSelection.h },
+      name,
+    });
+    if (result.success) {
+      appendLog(`✓ テンプレート保存: ${result.template.name} (${result.template.width}×${result.template.height})`);
+      hideTemplateNameDialog();
+      clearTemplateSelection();
+      await refreshTemplateList();
+    } else {
+      appendLog(`✗ テンプレート保存失敗: ${result.error}`);
+    }
+  } catch (err: any) {
+    appendLog(`✗ エラー: ${err.message}`);
+  }
+}
+
+async function refreshTemplateList(): Promise<void> {
+  const listEl = document.getElementById('template-list');
+  if (!listEl) return;
+  try {
+    const result = await (window as any).electronAPI.templateList();
+    if (!result.success || result.templates.length === 0) {
+      listEl.innerHTML = '<div class="template-list-empty">テンプレートなし</div>';
+      return;
+    }
+    listEl.innerHTML = '';
+    for (const tpl of result.templates) {
+      const item = document.createElement('div');
+      item.className = 'template-item';
+
+      let thumbSrc = '';
+      try {
+        const preview = await (window as any).electronAPI.templateGetPreview(tpl.name);
+        if (preview.success && preview.base64) thumbSrc = `data:image/png;base64,${preview.base64}`;
+      } catch { /* ignore */ }
+
+      item.innerHTML = `
+        <img class="template-thumb" src="${thumbSrc}" alt="${tpl.name}" style="width:48px;height:32px;object-fit:contain;border:1px solid #444;" />
+        <div class="template-info" style="flex:1;padding:0 8px;">
+          <div class="template-name" style="font-size:12px;">${tpl.name}</div>
+          <div class="template-size" style="font-size:11px;color:#888;">${tpl.width}×${tpl.height}</div>
+        </div>
+        <div class="template-actions">
+          <button class="btn-insert-find" title="find()を挿入">🔍</button>
+          <button class="btn-insert-find-click" title="find_click()を挿入">🖱️</button>
+          <button class="btn-test-match" title="マッチングテスト">🧪</button>
+          <button class="btn-delete-template" title="削除">🗑️</button>
+        </div>
+      `;
+
+      const nameVal = tpl.name;
+      item.querySelector('.btn-insert-find')?.addEventListener('click', () => {
+        insertCodeAtCursor(`find("${nameVal}")\nclick(found)`);
+      });
+      item.querySelector('.btn-insert-find-click')?.addEventListener('click', () => {
+        insertCodeAtCursor(`find_click("${nameVal}")`);
+      });
+      item.querySelector('.btn-test-match')?.addEventListener('click', async () => {
+        await testTemplateMatch(nameVal);
+      });
+      item.querySelector('.btn-delete-template')?.addEventListener('click', async () => {
+        if (confirm(`テンプレート "${nameVal}" を削除しますか？`)) {
+          const del = await (window as any).electronAPI.templateDelete(nameVal);
+          if (del.success) { appendLog(`テンプレート削除: ${nameVal}`); await refreshTemplateList(); }
+        }
+      });
+
+      listEl.appendChild(item);
+    }
+  } catch (err: any) {
+    listEl.innerHTML = `<div class="template-list-empty">読み込みエラー: ${err.message}</div>`;
+  }
+}
+
+function insertCodeAtCursor(code: string): void {
+  const editor = document.getElementById('rei-code') as HTMLTextAreaElement | null
+    ?? document.querySelector('textarea') as HTMLTextAreaElement | null;
+  if (!editor) return;
+  const pos = editor.selectionStart;
+  const before = editor.value.substring(0, pos);
+  const after = editor.value.substring(editor.selectionEnd);
+  const prefix = before.length > 0 && !before.endsWith('\n') ? '\n' : '';
+  editor.value = before + prefix + code + '\n' + after;
+  editor.selectionStart = editor.selectionEnd = pos + prefix.length + code.length + 1;
+  editor.focus();
+  appendLog(`コード挿入: ${code.split('\n')[0]}`);
+}
+
+async function testTemplateMatch(templateName: string): Promise<void> {
+  appendLog(`マッチングテスト開始: "${templateName}"`);
+  try {
+    const captureResult = await (window as any).electronAPI.captureScreen();
+    if (!captureResult.success) { appendLog('キャプチャ失敗'); return; }
+    const matchResult = await (window as any).electronAPI.templateTestMatch({
+      screenshotPath: captureResult.path,
+      templateName,
+    });
+    if (matchResult.success && matchResult.result) {
+      const r = matchResult.result;
+      if (r.found) {
+        appendLog(`✓ マッチ成功: (${r.centerX}, ${r.centerY}) 信頼度: ${(r.confidence * 100).toFixed(1)}%`);
+      } else {
+        appendLog(`✗ マッチ失敗: 最高信頼度 ${(r.confidence * 100).toFixed(1)}%`);
+      }
+    } else {
+      appendLog(`✗ テストエラー: ${matchResult.error}`);
+    }
+  } catch (err: any) {
+    appendLog(`✗ テストエラー: ${err.message}`);
+  }
 }

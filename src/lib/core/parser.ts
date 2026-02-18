@@ -32,6 +32,11 @@ import {
   WaitCommand,
   LoopCommand,
   CommentCommand,
+  // Phase 4: 画像認識
+  FindCommand,
+  ClickFoundCommand,
+  WaitFindCommand,
+  FindClickCommand,
 } from './types';
 
 /**
@@ -247,6 +252,67 @@ function parseCommand(
       durationMs,
       line: lineNum,
     } as WaitCommand;
+  }
+
+  // ── Phase 4: find("template.png") ─────────────────────
+  const findMatch = line.match(
+    /^find\(\s*"([^"]+)"\s*(?:,\s*([\d.]+))?\s*\)$/
+  );
+  if (findMatch) {
+    const template = findMatch[1];
+    const threshold = findMatch[2] ? parseFloat(findMatch[2]) : undefined;
+    return {
+      type: 'find' as const,
+      template,
+      ...(threshold !== undefined && { threshold }),
+      line: lineNum,
+    } as FindCommand;
+  }
+
+  // ── Phase 4: click(found) / click(found, offsetX, offsetY) ──
+  const clickFoundMatch = line.match(
+    /^(click|dblclick|rightclick)\(\s*found\s*(?:,\s*(-?\d+)\s*,\s*(-?\d+))?\s*\)$/
+  );
+  if (clickFoundMatch) {
+    const action = clickFoundMatch[1] as 'click' | 'dblclick' | 'rightclick';
+    const offsetX = clickFoundMatch[2] ? parseInt(clickFoundMatch[2]) : undefined;
+    const offsetY = clickFoundMatch[3] ? parseInt(clickFoundMatch[3]) : undefined;
+    return {
+      type: 'click_found' as const,
+      action,
+      ...(offsetX !== undefined && { offsetX }),
+      ...(offsetY !== undefined && { offsetY }),
+      line: lineNum,
+    } as ClickFoundCommand;
+  }
+
+  // ── Phase 4: wait_find("template.png", timeout, interval?) ──
+  const waitFindMatch = line.match(
+    /^wait_find\(\s*"([^"]+)"\s*,\s*(\d+)\s*(?:,\s*(\d+))?\s*(?:,\s*([\d.]+))?\s*\)$/
+  );
+  if (waitFindMatch) {
+    return {
+      type: 'wait_find' as const,
+      template: waitFindMatch[1],
+      timeout: parseInt(waitFindMatch[2]),
+      ...(waitFindMatch[3] && { interval: parseInt(waitFindMatch[3]) }),
+      ...(waitFindMatch[4] && { threshold: parseFloat(waitFindMatch[4]) }),
+      line: lineNum,
+    } as WaitFindCommand;
+  }
+
+  // ── Phase 4: find_click("template.png") ───────────────
+  const findClickMatch = line.match(
+    /^find_click\(\s*"([^"]+)"\s*(?:,\s*([\d.]+))?\s*\)$/
+  );
+  if (findClickMatch) {
+    return {
+      type: 'find_click' as const,
+      template: findClickMatch[1],
+      action: 'click' as const,
+      ...(findClickMatch[2] && { threshold: parseFloat(findClickMatch[2]) }),
+      line: lineNum,
+    } as FindClickCommand;
   }
 
   // 不明なコマンド

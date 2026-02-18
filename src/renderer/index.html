@@ -11,7 +11,7 @@
     <!-- ヘッダー -->
     <header class="header">
       <h1>Rei Automator</h1>
-      <span class="version">v0.3.0</span>
+      <span class="version">v0.4.0</span>
     </header>
 
     <!-- ツールバー -->
@@ -122,6 +122,10 @@
           <option value="move">move(x, y)</option>
         </select>
         <span id="capture-coords" class="capture-coords">座標: ---</span>
+        <!-- Phase 4: テンプレート作成モード -->
+        <button id="btn-template-mode" class="btn-small" title="テンプレート切り出しモード" style="margin-left:auto;">
+          📋 テンプレート作成
+        </button>
       </div>
 
       <div class="capture-image-container" id="capture-image-container">
@@ -148,6 +152,32 @@
             🗑 クリア
           </button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase 4: テンプレート管理パネル -->
+  <div style="padding: 0 16px 16px;">
+    <div style="background:#1e1e1e;border:1px solid #333;border-radius:6px;padding:12px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <h3 style="margin:0;font-size:14px;">📋 テンプレート一覧</h3>
+        <button id="btn-refresh-templates" class="btn-small" title="更新" onclick="refreshTemplateList()">🔄</button>
+      </div>
+      <div id="template-list" style="min-height:40px;max-height:200px;overflow-y:auto;">
+        <div class="template-list-empty" style="color:#666;font-size:12px;">テンプレートなし</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase 4: テンプレート名入力ダイアログ -->
+  <div id="template-name-dialog" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;align-items:center;justify-content:center;">
+    <div style="background:#2a2a2a;border:1px solid #555;border-radius:8px;padding:24px;min-width:300px;">
+      <h3 style="margin:0 0 12px;">テンプレート名を入力</h3>
+      <input type="text" id="template-name-input" placeholder="例: ok-button"
+        style="width:100%;box-sizing:border-box;padding:8px;background:#1a1a1a;border:1px solid #555;border-radius:4px;color:#e0e0e0;font-size:14px;" />
+      <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end;">
+        <button id="btn-save-template" class="btn-small" style="background:#0066cc;">💾 保存</button>
+        <button id="btn-cancel-template" class="btn-small">キャンセル</button>
       </div>
     </div>
   </div>

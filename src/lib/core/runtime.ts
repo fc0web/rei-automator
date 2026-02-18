@@ -9,9 +9,11 @@ import {
   ExecutionContext,
   ExecutionResult,
   ExecutionStatus,
+  FindState,
 } from './types';
 
 import { AutoController } from '../auto/controller';
+import { ImageMatcher } from '../auto/image-matcher';
 
 /**
  * Reiプログラムの実行エンジン
@@ -20,6 +22,13 @@ export class ReiRuntime {
   private context: ExecutionContext;
   private controller: AutoController;
   private abortController: AbortController | null = null;
+
+  // Phase 4: 画像認識
+  private findState: FindState = {
+    found: false, x: 0, y: 0, centerX: 0, centerY: 0, confidence: 0, template: '',
+  };
+  private imageMatcher: ImageMatcher | null = null;
+  private captureFunc: (() => Promise<string>) | null = null;
 
   constructor(controller: AutoController) {
     this.controller = controller;
@@ -31,6 +40,19 @@ export class ReiRuntime {
       onStatusChange: () => {},
       onLineExecute: () => {},
     };
+  }
+
+  // ── Phase 4: 注入メソッド ─────────────────────────────
+  setImageMatcher(matcher: ImageMatcher): void {
+    this.imageMatcher = matcher;
+  }
+
+  setCaptureFunc(func: () => Promise<string>): void {
+    this.captureFunc = func;
+  }
+
+  getFindState(): FindState {
+    return { ...this.findState };
   }
 
   /**
@@ -266,7 +288,146 @@ export class ReiRuntime {
         // 何もしない
         break;
 
-      default:
+      // ── Phase 4: find ─────────────────────────────────
+      case 'find': {
+        if (!this.imageMatcher || !this.captureFunc) {
+          this.context.onLog('エラー: 画像認識が初期化されていません', 'error');
+          break;
+        }
+        this.context.onLog(`テンプレート探索: "${command.template}"`, 'info');
+        const capturePath = await this.captureFunc();
+        const result = await this.imageMatcher.findTemplate(
+          capturePath,
+          command.template,
+          { threshold: command.threshold }
+        );
+        this.findState = {
+          found: result.found,
+          x: result.x, y: result.y,
+          centerX: result.centerX, centerY: result.centerY,
+          confidence: result.confidence,
+          template: command.template,
+        };
+        if (result.found) {
+          this.context.onLog(
+            `✓ 発見: "${command.template}" at (${result.centerX}, ${result.centerY}) 信頼度: ${(result.confidence * 100).toFixed(1)}%`,
+            'info'
+          );
+        } else {
+          this.context.onLog(
+            `✗ 未発見: "${command.template}" (最高信頼度: ${(result.confidence * 100).toFixed(1)}%)`,
+            'warn'
+          );
+        }
+        break;
+      }
+
+      // ── Phase 4: click_found ──────────────────────────
+      case 'click_found': {
+        if (!this.findState.found) {
+          this.context.onLog('エラー: find() が未実行または画像が見つかりませんでした', 'error');
+          break;
+        }
+        const targetX = this.findState.centerX + (command.offsetX ?? 0);
+        const targetY = this.findState.centerY + (command.offsetY ?? 0);
+        this.context.onLog(
+          `${command.action}(found) → (${targetX}, ${targetY}) [テンプレート: ${this.findState.template}]`,
+          'info'
+        );
+        switch (command.action) {
+          case 'click': await this.controller.click(targetX, targetY); break;
+          case 'dblclick': await this.controller.dblclick(targetX, targetY); break;
+          case 'rightclick': await this.controller.rightclick(targetX, targetY); break;
+        }
+        break;
+      }
+
+      // ── Phase 4: wait_find ────────────────────────────
+      case 'wait_find': {
+        if (!this.imageMatcher || !this.captureFunc) {
+          this.context.onLog('エラー: 画像認識が初期化されていません', 'error');
+          break;
+        }
+        const timeout = command.timeout ?? 10000;
+        const interval = command.interval ?? 500;
+        const startTime = Date.now();
+        this.context.onLog(
+          `テンプレート待機: "${command.template}" (タイムアウト: ${timeout}ms, 間隔: ${interval}ms)`,
+          'info'
+        );
+        let found = false;
+        while (Date.now() - startTime < timeout && this.context.running) {
+          await this.waitWhilePaused();
+          if (!this.context.running) break;
+          const capPath = await this.captureFunc();
+          const matchResult = await this.imageMatcher.findTemplate(
+            capPath, command.template, { threshold: command.threshold }
+          );
+          if (matchResult.found) {
+            this.findState = {
+              found: true,
+              x: matchResult.x, y: matchResult.y,
+              centerX: matchResult.centerX, centerY: matchResult.centerY,
+              confidence: matchResult.confidence,
+              template: command.template,
+            };
+            this.context.onLog(
+              `✓ 発見: "${command.template}" at (${matchResult.centerX}, ${matchResult.centerY}) ${((Date.now() - startTime) / 1000).toFixed(1)}秒後`,
+              'info'
+            );
+            found = true;
+            break;
+          }
+          await this.sleep(interval);
+        }
+        if (!found && this.context.running) {
+          this.context.onLog(
+            `✗ タイムアウト: "${command.template}" が ${timeout}ms 以内に見つかりませんでした`,
+            'warn'
+          );
+          this.findState = { found: false, x: 0, y: 0, centerX: 0, centerY: 0, confidence: 0, template: command.template };
+        }
+        break;
+      }
+
+      // ── Phase 4: find_click ───────────────────────────
+      case 'find_click': {
+        if (!this.imageMatcher || !this.captureFunc) {
+          this.context.onLog('エラー: 画像認識が初期化されていません', 'error');
+          break;
+        }
+        this.context.onLog(`探索+クリック: "${command.template}"`, 'info');
+        const capPath = await this.captureFunc();
+        const matchResult = await this.imageMatcher.findTemplate(
+          capPath, command.template, { threshold: command.threshold }
+        );
+        if (matchResult.found) {
+          const fcX = matchResult.centerX + (command.offsetX ?? 0);
+          const fcY = matchResult.centerY + (command.offsetY ?? 0);
+          this.findState = {
+            found: true,
+            x: matchResult.x, y: matchResult.y,
+            centerX: matchResult.centerX, centerY: matchResult.centerY,
+            confidence: matchResult.confidence,
+            template: command.template,
+          };
+          this.context.onLog(
+            `✓ 発見+${command.action}: (${fcX}, ${fcY}) 信頼度: ${(matchResult.confidence * 100).toFixed(1)}%`,
+            'info'
+          );
+          switch (command.action) {
+            case 'click': await this.controller.click(fcX, fcY); break;
+            case 'dblclick': await this.controller.dblclick(fcX, fcY); break;
+            case 'rightclick': await this.controller.rightclick(fcX, fcY); break;
+          }
+        } else {
+          this.context.onLog(
+            `✗ 未発見: "${command.template}" (最高信頼度: ${(matchResult.confidence * 100).toFixed(1)}%)`,
+            'warn'
+          );
+        }
+        break;
+      }
         this.context.onLog(`不明なコマンド: ${(command as any).type}`, 'warn');
     }
   }

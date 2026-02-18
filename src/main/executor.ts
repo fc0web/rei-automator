@@ -10,6 +10,7 @@ import { AutoController } from '../lib/auto/controller';
 import { WindowsBackend } from '../lib/auto/windows-backend';
 import { StubBackend } from '../lib/auto/stub-backend';
 import { ExecutionResult } from '../lib/core/types';
+import { ImageMatcher } from '../lib/auto/image-matcher';
 
 export class ReiExecutor {
   private runtime: ReiRuntime;
@@ -116,6 +117,15 @@ export class ReiExecutor {
    */
   isRunning(): boolean {
     return this.runtime.isRunning();
+  }
+
+  // ── Phase 4: ImageMatcher 注入 ────────────────────────
+  setImageMatcher(matcher: ImageMatcher): void {
+    this.runtime.setImageMatcher(matcher);
+  }
+
+  setCaptureFunc(func: () => Promise<string>): void {
+    this.runtime.setCaptureFunc(func);
   }
 
   /**
