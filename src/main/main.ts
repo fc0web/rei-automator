@@ -7,6 +7,7 @@ import { app, BrowserWindow, ipcMain, globalShortcut } from 'electron';
 import * as path from 'path';
 import { ReiExecutor } from './executor';
 import { FileManager } from './file-manager';
+import { convertJapaneseToRei, convertWithClaudeAPI } from '../lib/core/converter';
 
 let mainWindow: BrowserWindow | null = null;
 let executor: ReiExecutor | null = null;
@@ -21,7 +22,7 @@ function createMainWindow(): void {
     height: 700,
     minWidth: 800,
     minHeight: 600,
-    title: 'Rei Automator v0.1',
+    title: 'Rei Automator v0.2',
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -121,6 +122,26 @@ function setupIpcHandlers(): void {
   ipcMain.handle('load-script-dialog', async () => {
     if (!fileManager || !mainWindow) return { success: false };
     return fileManager.loadWithDialog(mainWindow);
+  });
+
+  // 日本語→Reiコード変換（ルールベース）
+  ipcMain.handle('convert-japanese', async (_event, text: string) => {
+    try {
+      const code = convertJapaneseToRei(text);
+      return { success: true, code };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  // 日本語→Reiコード変換（Claude API）
+  ipcMain.handle('convert-japanese-api', async (_event, text: string, apiKey: string) => {
+    try {
+      const code = await convertWithClaudeAPI(text, apiKey);
+      return { success: true, code };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
   });
 
   // 直接保存

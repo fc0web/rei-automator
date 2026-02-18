@@ -65,9 +65,9 @@ function setupEventListeners() {
     await saveScriptWithDialog();
   });
 
-  // コード生成ボタン（Phase 2）
-  elements.btnConvert.addEventListener('click', () => {
-    showNotification('コード生成機能はPhase 2で実装予定です');
+  // コード生成ボタン
+  elements.btnConvert.addEventListener('click', async () => {
+    await convertJapaneseToCode();
   });
 
   // 実行ボタン
@@ -92,6 +92,11 @@ function setupEventListeners() {
   // Reiコードエリアの変更監視
   elements.reiCode.addEventListener('input', () => {
     elements.btnExecute.disabled = elements.reiCode.value.trim() === '';
+  });
+
+  // 日本語入力エリアの変更監視
+  elements.japaneseInput.addEventListener('input', () => {
+    elements.btnConvert.disabled = elements.japaneseInput.value.trim() === '';
   });
 }
 
@@ -253,6 +258,48 @@ async function loadScriptWithDialog() {
   } catch (error) {
     console.error('Load error:', error);
     showNotification('読み込みに失敗しました', 'error');
+  }
+}
+
+/**
+ * 日本語をReiコードに変換
+ */
+async function convertJapaneseToCode() {
+  const japaneseText = elements.japaneseInput.value.trim();
+
+  if (!japaneseText) {
+    showNotification('日本語テキストを入力してください', 'error');
+    return;
+  }
+
+  try {
+    elements.btnConvert.disabled = true;
+    elements.btnConvert.textContent = '🔄 変換中...';
+
+    const result = await window.electronAPI.convertJapanese(japaneseText);
+
+    if (result.success && result.code) {
+      // 既存コードがあれば末尾に追加、なければ置換
+      const existingCode = elements.reiCode.value.trim();
+      if (existingCode) {
+        elements.reiCode.value = existingCode + '\n\n' + result.code;
+      } else {
+        elements.reiCode.value = result.code;
+      }
+
+      elements.btnExecute.disabled = false;
+      appendLog(`✅ 変換完了: ${japaneseText.substring(0, 30)}...`, 'info');
+      showNotification('コード生成しました');
+    } else {
+      showNotification(result.error || '変換に失敗しました', 'error');
+      appendLog(`❌ 変換失敗: ${result.error}`, 'error');
+    }
+  } catch (error: any) {
+    console.error('Convert error:', error);
+    showNotification('変換エラーが発生しました', 'error');
+  } finally {
+    elements.btnConvert.disabled = elements.japaneseInput.value.trim() === '';
+    elements.btnConvert.textContent = '🔄 コード生成';
   }
 }
 

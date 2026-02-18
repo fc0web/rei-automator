@@ -22,6 +22,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   loadScript: (filename: string) => ipcRenderer.invoke('load-script', filename),
   listScripts: () => ipcRenderer.invoke('list-scripts'),
 
+  // 日本語→Reiコード変換
+  convertJapanese: (text: string) => ipcRenderer.invoke('convert-japanese', text),
+  convertJapaneseAPI: (text: string, apiKey: string) =>
+    ipcRenderer.invoke('convert-japanese-api', text, apiKey),
+
   // イベントリスナー
   onExecutionStatus: (callback: (status: string) => void) => {
     ipcRenderer.on('execution-status', (_event, status) => callback(status));
@@ -50,6 +55,8 @@ declare global {
       saveScript: (filename: string, code: string) => Promise<{ success: boolean; path?: string }>;
       loadScript: (filename: string) => Promise<{ success: boolean; code?: string }>;
       listScripts: () => Promise<string[]>;
+      convertJapanese: (text: string) => Promise<{ success: boolean; code?: string; error?: string }>;
+      convertJapaneseAPI: (text: string, apiKey: string) => Promise<{ success: boolean; code?: string; error?: string }>;
       onExecutionStatus: (callback: (status: string) => void) => void;
       onExecutionLog: (callback: (data: { message: string; level: string }) => void) => void;
       onExecutionLine: (callback: (line: number) => void) => void;
