@@ -1,9 +1,9 @@
-/**
+﻿/**
  * Rei Automator - Styles
- * Phase 3: キャプチャ・座標指定モーダル追加
+ * Phase 3: 繧ｭ繝｣繝励メ繝｣繝ｻ蠎ｧ讓呎欠螳壹Δ繝ｼ繝繝ｫ霑ｽ蜉
  */
 
-/* リセット */
+/* 繝ｪ繧ｻ繝・ヨ */
 * {
   margin: 0;
   padding: 0;
@@ -14,10 +14,10 @@ body {
   font-family: 'Segoe UI', 'Yu Gothic UI', 'Meiryo UI', sans-serif;
   background-color: #f5f5f5;
   color: #333;
-  overflow: hidden;
+  overflow-y: auto;
 }
 
-/* コンテナ */
+/* 繧ｳ繝ｳ繝・リ */
 .container {
   display: flex;
   flex-direction: column;
@@ -25,7 +25,7 @@ body {
   padding: 0;
 }
 
-/* ヘッダー */
+/* 繝倥ャ繝繝ｼ */
 .header {
   display: flex;
   align-items: center;
@@ -49,7 +49,7 @@ body {
   border-radius: 12px;
 }
 
-/* ツールバー */
+/* 繝・・繝ｫ繝舌・ */
 .toolbar {
   display: flex;
   gap: 8px;
@@ -84,7 +84,7 @@ body {
   margin: 0 8px;
 }
 
-/* セクション */
+/* 繧ｻ繧ｯ繧ｷ繝ｧ繝ｳ */
 .section {
   padding: 16px 20px;
   background-color: #fff;
@@ -104,7 +104,7 @@ body {
   color: #555;
 }
 
-/* 入力エリア */
+/* 蜈･蜉帙お繝ｪ繧｢ */
 .input-area {
   width: 100%;
   min-height: 60px;
@@ -127,7 +127,7 @@ body {
   color: #999;
 }
 
-/* コードエリア */
+/* 繧ｳ繝ｼ繝峨お繝ｪ繧｢ */
 .code-area {
   width: 100%;
   min-height: 200px;
@@ -148,7 +148,7 @@ body {
   background-color: #fff;
 }
 
-/* コントロール */
+/* 繧ｳ繝ｳ繝医Ο繝ｼ繝ｫ */
 .controls {
   display: flex;
   align-items: center;
@@ -228,7 +228,7 @@ body {
   cursor: not-allowed;
 }
 
-/* ステータス */
+/* 繧ｹ繝・・繧ｿ繧ｹ */
 .status {
   display: flex;
   align-items: center;
@@ -260,7 +260,7 @@ body {
   background-color: #fff5f5;
 }
 
-/* フッター */
+/* 繝輔ャ繧ｿ繝ｼ */
 .footer {
   display: flex;
   justify-content: space-between;
@@ -272,7 +272,7 @@ body {
   color: #666;
 }
 
-/* 実行ログ */
+/* 螳溯｡後Ο繧ｰ */
 .log-area {
   height: 120px;
   overflow-y: auto;
@@ -308,7 +308,7 @@ body {
 }
 
 /* ========================================
-   キャプチャ・座標指定モーダル (Phase 3)
+   繧ｭ繝｣繝励メ繝｣繝ｻ蠎ｧ讓呎欠螳壹Δ繝ｼ繝繝ｫ (Phase 3)
    ======================================== */
 
 .capture-overlay {
@@ -333,7 +333,7 @@ body {
   max-width: 1200px;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow-y: auto;
 }
 
 .capture-modal-header {
@@ -390,7 +390,7 @@ body {
   border-radius: 4px;
 }
 
-/* キャプチャ画像表示エリア */
+/* 繧ｭ繝｣繝励メ繝｣逕ｻ蜒剰｡ｨ遉ｺ繧ｨ繝ｪ繧｢ */
 .capture-image-container {
   flex: 1;
   position: relative;
@@ -426,7 +426,7 @@ body {
   image-rendering: auto;
 }
 
-/* キャプチャマーカー */
+/* 繧ｭ繝｣繝励メ繝｣繝槭・繧ｫ繝ｼ */
 .capture-markers {
   position: absolute;
   top: 0;
@@ -454,7 +454,7 @@ body {
   pointer-events: none;
 }
 
-/* 座標履歴 */
+/* 蠎ｧ讓吝ｱ･豁ｴ */
 .capture-history {
   padding: 10px 20px;
   background-color: #f8f8f8;
@@ -507,7 +507,7 @@ body {
   white-space: nowrap;
 }
 
-/* スクロールバー */
+/* 繧ｹ繧ｯ繝ｭ繝ｼ繝ｫ繝舌・ */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
