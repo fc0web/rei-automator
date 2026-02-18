@@ -14,6 +14,7 @@ import {
 
 import { AutoController } from '../auto/controller';
 import { ImageMatcher } from '../auto/image-matcher';
+import { OcrEngine } from '../auto/ocr';
 
 /**
  * Reiプログラムの実行エンジン
@@ -29,6 +30,10 @@ export class ReiRuntime {
   };
   private imageMatcher: ImageMatcher | null = null;
   private captureFunc: (() => Promise<string>) | null = null;
+
+  // Phase 5: OCR
+  private ocrEngine: OcrEngine | null = null;
+  private lastText = '';  // read() の結果を保持
 
   constructor(controller: AutoController) {
     this.controller = controller;
@@ -53,6 +58,15 @@ export class ReiRuntime {
 
   getFindState(): FindState {
     return { ...this.findState };
+  }
+
+  // ── Phase 5: OCR注入メソッド ──────────────────────────
+  setOcrEngine(engine: OcrEngine): void {
+    this.ocrEngine = engine;
+  }
+
+  getLastText(): string {
+    return this.lastText;
   }
 
   /**
@@ -428,6 +442,100 @@ export class ReiRuntime {
         }
         break;
       }
+
+      // ── Phase 5: read(x, y, width, height) ───────────────
+      case 'read': {
+        if (!this.captureFunc) {
+          this.context.onLog('エラー: キャプチャ機能が初期化されていません', 'error');
+          break;
+        }
+        if (!this.ocrEngine) {
+          this.context.onLog('エラー: OCRエンジンが初期化されていません', 'error');
+          break;
+        }
+        this.context.onLog(
+          `OCR読み取り: 領域 (${command.x}, ${command.y}, ${command.width}×${command.height})`,
+          'info'
+        );
+        const capPathOcr = await this.captureFunc();
+        const ocrResult = await this.ocrEngine.read(
+          capPathOcr, command.x, command.y, command.width, command.height
+        );
+        if (ocrResult.success) {
+          this.lastText = ocrResult.text;
+          this.context.onLog(
+            `✓ OCR結果: "${ocrResult.text}" (信頼度: ${ocrResult.confidence.toFixed(1)}%)`,
+            'info'
+          );
+        } else {
+          this.lastText = '';
+          this.context.onLog(`✗ OCRエラー: ${ocrResult.error}`, 'error');
+        }
+        break;
+      }
+
+      // ── Phase 5: if文 ──────────────────────────────────────
+      case 'if': {
+        const cond = command.condition;
+        let condResult = false;
+
+        switch (cond.type) {
+          case 'found':
+            condResult = this.findState.found;
+            this.context.onLog(
+              `if found → ${condResult} [テンプレート: ${this.findState.template}]`,
+              'debug'
+            );
+            break;
+          case 'not_found':
+            condResult = !this.findState.found;
+            this.context.onLog(
+              `if not found → ${condResult}`,
+              'debug'
+            );
+            break;
+          case 'text_eq':
+            condResult = this.lastText === cond.value;
+            this.context.onLog(
+              `if text == "${cond.value}" → ${condResult} [text="${this.lastText}"]`,
+              'debug'
+            );
+            break;
+          case 'text_ne':
+            condResult = this.lastText !== cond.value;
+            this.context.onLog(
+              `if text != "${cond.value}" → ${condResult} [text="${this.lastText}"]`,
+              'debug'
+            );
+            break;
+          case 'text_contains':
+            condResult = this.lastText.includes(cond.value);
+            this.context.onLog(
+              `if text contains "${cond.value}" → ${condResult} [text="${this.lastText}"]`,
+              'debug'
+            );
+            break;
+          case 'text_not_contains':
+            condResult = !this.lastText.includes(cond.value);
+            this.context.onLog(
+              `if text not contains "${cond.value}" → ${condResult} [text="${this.lastText}"]`,
+              'debug'
+            );
+            break;
+        }
+
+        if (condResult) {
+          this.context.onLog('→ then ブロックを実行', 'debug');
+          await this.executeCommands(command.thenBlock);
+        } else if (command.elseBlock) {
+          this.context.onLog('→ else ブロックを実行', 'debug');
+          await this.executeCommands(command.elseBlock);
+        } else {
+          this.context.onLog('→ 条件不成立 (elseなし、スキップ)', 'debug');
+        }
+        break;
+      }
+
         this.context.onLog(`不明なコマンド: ${(command as any).type}`, 'warn');
     }
   }
