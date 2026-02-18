@@ -11,15 +11,15 @@
     <!-- ヘッダー -->
     <header class="header">
       <h1>Rei Automator</h1>
-      <span class="version">v0.2.0</span>
+      <span class="version">v0.3.0</span>
     </header>
 
     <!-- ツールバー -->
     <div class="toolbar">
-      <button id="btn-capture" class="toolbar-btn" title="画面をキャプチャ" disabled>
+      <button id="btn-capture" class="toolbar-btn" title="画面をキャプチャ">
         📷 キャプチャ
       </button>
-      <button id="btn-target" class="toolbar-btn" title="座標を指定" disabled>
+      <button id="btn-target" class="toolbar-btn" title="キャプチャ画像から座標を指定">
         🎯 座標指定
       </button>
       <div class="toolbar-separator"></div>
@@ -39,9 +39,9 @@
           🔄 コード生成
         </button>
       </div>
-      <textarea 
-        id="japanese-input" 
-        class="input-area" 
+      <textarea
+        id="japanese-input"
+        class="input-area"
         placeholder="例：座標(500,400)をクリックして、3秒待って、&quot;Hello&quot;と入力&#10;例：100,200をクリックして500ミリ秒待つを5回繰り返す&#10;例：Ctrl+Cを押して、1秒待って、Ctrl+Vを押す"
       ></textarea>
     </div>
@@ -51,22 +51,12 @@
       <div class="section-header">
         <label for="rei-code">Reiコード:</label>
       </div>
-      <textarea 
-        id="rei-code" 
-        class="code-area" 
+      <textarea
+        id="rei-code"
+        class="code-area"
         placeholder="// Reiコードを記述してください&#10;// 例：&#10;click(100, 200)&#10;wait(3s)&#10;type(&quot;Hello&quot;)"
         spellcheck="false"
       ></textarea>
-    </div>
-
-    <!-- キャプチャ素材セクション -->
-    <div class="section captures-section" style="display: none;">
-      <div class="section-header">
-        <label>キャプチャ済み素材:</label>
-      </div>
-      <div id="captures-container" class="captures-container">
-        <!-- キャプチャした素材がここに表示される -->
-      </div>
     </div>
 
     <!-- 実行ログ -->
@@ -106,6 +96,60 @@
         © 2024-2026 Nobuki Fujimoto
       </div>
     </footer>
+  </div>
+
+  <!-- ========== キャプチャ・座標指定オーバーレイ ========== -->
+  <div id="capture-overlay" class="capture-overlay" style="display:none;">
+    <div class="capture-modal">
+      <div class="capture-modal-header">
+        <h2 id="capture-modal-title">📷 画面キャプチャ</h2>
+        <div class="capture-modal-actions">
+          <button id="btn-capture-new" class="btn-small" title="新しくキャプチャ">
+            📷 再キャプチャ
+          </button>
+          <button id="btn-capture-close" class="btn-small btn-close-modal" title="閉じる">
+            ✕ 閉じる
+          </button>
+        </div>
+      </div>
+
+      <div class="capture-toolbar">
+        <label>挿入コマンド:</label>
+        <select id="capture-command-type">
+          <option value="click">click(x, y)</option>
+          <option value="dblclick">dblclick(x, y)</option>
+          <option value="rightclick">rightclick(x, y)</option>
+          <option value="move">move(x, y)</option>
+        </select>
+        <span id="capture-coords" class="capture-coords">座標: ---</span>
+      </div>
+
+      <div class="capture-image-container" id="capture-image-container">
+        <div id="capture-loading" class="capture-loading" style="display:none;">
+          ⏳ キャプチャ中...
+        </div>
+        <div id="capture-empty" class="capture-empty">
+          「📷 キャプチャ」ボタンまたは上の「📷 再キャプチャ」で画面をキャプチャ
+        </div>
+        <canvas id="capture-canvas" class="capture-canvas" style="display:none;"></canvas>
+        <div id="capture-markers" class="capture-markers"></div>
+      </div>
+
+      <div class="capture-history">
+        <label>選択した座標:</label>
+        <div id="capture-history-list" class="capture-history-list">
+          <span class="capture-history-empty">画像をクリックして座標を選択してください</span>
+        </div>
+        <div class="capture-history-actions">
+          <button id="btn-insert-coords" class="btn-small" disabled>
+            📋 コードに挿入
+          </button>
+          <button id="btn-clear-coords" class="btn-small" disabled>
+            🗑 クリア
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script src="renderer.js"></script>

@@ -1,6 +1,6 @@
 /**
  * Rei Automator - Styles
- * UIスタイルシート
+ * Phase 3: キャプチャ・座標指定モーダル追加
  */
 
 /* リセット */
@@ -148,33 +148,6 @@ body {
   background-color: #fff;
 }
 
-/* キャプチャセクション */
-.captures-section {
-  max-height: 150px;
-  overflow-y: auto;
-}
-
-.captures-container {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.capture-item {
-  padding: 8px 12px;
-  background-color: #f0f0f0;
-  border: 1px solid #d0d0d0;
-  border-radius: 4px;
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.capture-item:hover {
-  background-color: #e8e8e8;
-  border-color: #667eea;
-}
-
 /* コントロール */
 .controls {
   display: flex;
@@ -237,6 +210,14 @@ body {
 
 .btn-small:hover:not(:disabled) {
   background-color: #5568d3;
+}
+
+.btn-close-modal {
+  background-color: #718096;
+}
+
+.btn-close-modal:hover {
+  background-color: #4a5568;
 }
 
 .btn-primary:disabled,
@@ -324,6 +305,206 @@ body {
 
 .log-debug {
   color: #888;
+}
+
+/* ========================================
+   キャプチャ・座標指定モーダル (Phase 3)
+   ======================================== */
+
+.capture-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.capture-modal {
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  width: 90vw;
+  height: 90vh;
+  max-width: 1200px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.capture-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 20px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.capture-modal-header h2 {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.capture-modal-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.capture-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 20px;
+  background-color: #f8f8f8;
+  border-bottom: 1px solid #e0e0e0;
+  font-size: 13px;
+}
+
+.capture-toolbar label {
+  font-weight: 600;
+  color: #555;
+}
+
+.capture-toolbar select {
+  padding: 4px 8px;
+  border: 1px solid #d0d0d0;
+  border-radius: 4px;
+  font-size: 13px;
+  font-family: 'Consolas', monospace;
+  background-color: #fff;
+}
+
+.capture-coords {
+  margin-left: auto;
+  font-family: 'Consolas', monospace;
+  font-size: 13px;
+  color: #667eea;
+  font-weight: 600;
+  background-color: #f0f4ff;
+  padding: 4px 10px;
+  border-radius: 4px;
+}
+
+/* キャプチャ画像表示エリア */
+.capture-image-container {
+  flex: 1;
+  position: relative;
+  overflow: auto;
+  background-color: #2d2d2d;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.capture-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ccc;
+  font-size: 16px;
+}
+
+.capture-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #888;
+  font-size: 14px;
+  padding: 20px;
+  text-align: center;
+}
+
+.capture-canvas {
+  cursor: crosshair;
+  display: block;
+  max-width: 100%;
+  image-rendering: auto;
+}
+
+/* キャプチャマーカー */
+.capture-markers {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.capture-marker {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background-color: rgba(245, 101, 101, 0.85);
+  color: white;
+  font-size: 11px;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: translate(-50%, -50%);
+  border: 2px solid white;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+}
+
+/* 座標履歴 */
+.capture-history {
+  padding: 10px 20px;
+  background-color: #f8f8f8;
+  border-top: 1px solid #e0e0e0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 50px;
+}
+
+.capture-history label {
+  font-weight: 600;
+  font-size: 13px;
+  color: #555;
+  white-space: nowrap;
+}
+
+.capture-history-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex: 1;
+  overflow-x: auto;
+}
+
+.capture-history-empty {
+  color: #999;
+  font-size: 12px;
+}
+
+.capture-history-item {
+  padding: 3px 10px;
+  background-color: #667eea;
+  color: white;
+  border-radius: 12px;
+  font-size: 12px;
+  font-family: 'Consolas', monospace;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  white-space: nowrap;
+}
+
+.capture-history-item:hover {
+  background-color: #f56565;
+}
+
+.capture-history-actions {
+  display: flex;
+  gap: 6px;
+  white-space: nowrap;
 }
 
 /* スクロールバー */

@@ -1,6 +1,6 @@
 {
   "name": "rei-automator",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Rei PC Automation Tool - Lightweight PC automation powered by Rei language",
   "main": "dist/main/main.js",
   "author": "Nobuki Fujimoto",

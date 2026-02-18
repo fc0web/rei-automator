@@ -27,6 +27,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   convertJapaneseAPI: (text: string, apiKey: string) =>
     ipcRenderer.invoke('convert-japanese-api', text, apiKey),
 
+  // 画面キャプチャ（Phase 3）
+  captureScreen: () => ipcRenderer.invoke('capture-screen'),
+  listCaptures: () => ipcRenderer.invoke('list-captures'),
+  loadCapture: (filename: string) => ipcRenderer.invoke('load-capture', filename),
+
   // イベントリスナー
   onExecutionStatus: (callback: (status: string) => void) => {
     ipcRenderer.on('execution-status', (_event, status) => callback(status));

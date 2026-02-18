@@ -7,11 +7,13 @@ import { app, BrowserWindow, ipcMain, globalShortcut } from 'electron';
 import * as path from 'path';
 import { ReiExecutor } from './executor';
 import { FileManager } from './file-manager';
+import { ScreenCapture } from './screen-capture';
 import { convertJapaneseToRei, convertWithClaudeAPI } from '../lib/core/converter';
 
 let mainWindow: BrowserWindow | null = null;
 let executor: ReiExecutor | null = null;
 let fileManager: FileManager | null = null;
+let screenCapture: ScreenCapture | null = null;
 
 /**
  * メインウィンドウを作成
@@ -22,7 +24,7 @@ function createMainWindow(): void {
     height: 700,
     minWidth: 800,
     minHeight: 600,
-    title: 'Rei Automator v0.2',
+    title: 'Rei Automator v0.3',
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -161,6 +163,39 @@ function setupIpcHandlers(): void {
     if (!fileManager) return [];
     return fileManager.listScripts();
   });
+
+  // ========== Phase 3: 画面キャプチャ ==========
+
+  // 画面キャプチャ（ウィンドウを一時非表示にしてキャプチャ）
+  ipcMain.handle('capture-screen', async () => {
+    if (!screenCapture || !mainWindow) {
+      return { success: false, error: 'ScreenCapture not initialized' };
+    }
+
+    // ウィンドウを一時的に非表示
+    mainWindow.hide();
+    await new Promise((r) => setTimeout(r, 300));
+
+    const result = await screenCapture.captureAndSave();
+
+    // ウィンドウを再表示
+    mainWindow.show();
+    mainWindow.focus();
+
+    return result;
+  });
+
+  // 保存済みキャプチャ一覧
+  ipcMain.handle('list-captures', async () => {
+    if (!screenCapture) return [];
+    return screenCapture.listCaptures();
+  });
+
+  // キャプチャ画像を読み込み
+  ipcMain.handle('load-capture', async (_event, filename: string) => {
+    if (!screenCapture) return { success: false };
+    return screenCapture.loadCapture(filename);
+  });
 }
 
 // アプリ起動
@@ -168,6 +203,7 @@ app.whenReady().then(() => {
   const useStub = process.argv.includes('--stub');
   executor = new ReiExecutor(useStub);
   fileManager = new FileManager();
+  screenCapture = new ScreenCapture();
 
   setupIpcHandlers();
   createMainWindow();
