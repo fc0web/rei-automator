@@ -13,6 +13,7 @@
     "build:main": "tsc -p tsconfig.main.json",
     "build:renderer": "tsc -p tsconfig.renderer.json",
     "start": "electron .",
+    "start:stub": "electron . --stub",
     "package": "electron-builder",
     "test": "jest",
     "lint": "eslint src --ext .ts"
