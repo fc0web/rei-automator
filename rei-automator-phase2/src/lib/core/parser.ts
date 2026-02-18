@@ -1,0 +1,300 @@
+/**
+ * Rei Automator - パーサー
+ * Reiコードを解析してASTを生成
+ * 
+ * サポートする構文（Phase 1）:
+ *   click(x, y)
+ *   dblclick(x, y)
+ *   rightclick(x, y)
+ *   move(x, y)
+ *   drag(x1, y1, x2, y2)
+ *   type("text")
+ *   key("Enter")
+ *   shortcut("Ctrl+C")
+ *   wait(3s) / wait(500ms) / wait(3)
+ *   loop(count):  / loop:
+ *     ...コマンド（インデント）
+ *   // コメント
+ */
+
+import {
+  ReiCommand,
+  ReiProgram,
+  ParseError,
+  ClickCommand,
+  DblClickCommand,
+  RightClickCommand,
+  MoveCommand,
+  DragCommand,
+  TypeCommand,
+  KeyCommand,
+  ShortcutCommand,
+  WaitCommand,
+  LoopCommand,
+  CommentCommand,
+} from './types';
+
+/**
+ * Reiコードをパースしてプログラム（AST）を返す
+ */
+export function parse(code: string): ReiProgram {
+  const lines = code.split('\n');
+  const errors: ParseError[] = [];
+  const commands = parseBlock(lines, 0, 0, errors);
+
+  return { commands, errors };
+}
+
+/**
+ * インデントレベルに基づいてブロックをパース
+ */
+function parseBlock(
+  lines: string[],
+  startIndex: number,
+  indentLevel: number,
+  errors: ParseError[]
+): ReiCommand[] {
+  const commands: ReiCommand[] = [];
+  let i = startIndex;
+
+  while (i < lines.length) {
+    const rawLine = lines[i];
+    const trimmed = rawLine.trim();
+    const lineNum = i + 1; // 1-based line number
+
+    // 空行をスキップ
+    if (trimmed === '') {
+      i++;
+      continue;
+    }
+
+    // 現在のインデントレベルを計算
+    const currentIndent = getIndentLevel(rawLine);
+
+    // インデントが親ブロックより浅ければブロック終了
+    if (currentIndent < indentLevel) {
+      break;
+    }
+
+    // インデントが期待と一致しない場合はスキップ
+    if (currentIndent > indentLevel) {
+      // ループ内ブロック以外で深いインデントはエラー
+      errors.push({
+        message: `不正なインデントです（行 ${lineNum}）`,
+        line: lineNum,
+      });
+      i++;
+      continue;
+    }
+
+    // コメント
+    if (trimmed.startsWith('//')) {
+      commands.push({
+        type: 'comment',
+        text: trimmed.substring(2).trim(),
+        line: lineNum,
+      } as CommentCommand);
+      i++;
+      continue;
+    }
+
+    // loop文の判定
+    const loopMatch = trimmed.match(/^loop(?:\((\d+)\))?:\s*$/);
+    if (loopMatch) {
+      const count = loopMatch[1] ? parseInt(loopMatch[1], 10) : null;
+      
+      // ループ本体を取得（次のインデントレベル）
+      const bodyStartIndex = i + 1;
+      const bodyIndent = indentLevel + 1;
+      const body = parseBlock(lines, bodyStartIndex, bodyIndent, errors);
+
+      if (body.length === 0) {
+        errors.push({
+          message: `ループの本体が空です（行 ${lineNum}）`,
+          line: lineNum,
+        });
+      }
+
+      // ループ本体の行数を数えて次の位置に移動
+      const bodyLines = countBlockLines(lines, bodyStartIndex, bodyIndent);
+
+      commands.push({
+        type: 'loop',
+        count,
+        body,
+        line: lineNum,
+      } as LoopCommand);
+
+      i = bodyStartIndex + bodyLines;
+      continue;
+    }
+
+    // 通常のコマンドをパース
+    const command = parseCommand(trimmed, lineNum, errors);
+    if (command) {
+      commands.push(command);
+    }
+
+    i++;
+  }
+
+  return commands;
+}
+
+/**
+ * 1行のコマンドをパース
+ */
+function parseCommand(
+  line: string,
+  lineNum: number,
+  errors: ParseError[]
+): ReiCommand | null {
+  // click(x, y)
+  const clickMatch = line.match(/^click\(\s*(\d+)\s*,\s*(\d+)\s*\)$/);
+  if (clickMatch) {
+    return {
+      type: 'click',
+      x: parseInt(clickMatch[1], 10),
+      y: parseInt(clickMatch[2], 10),
+      line: lineNum,
+    } as ClickCommand;
+  }
+
+  // dblclick(x, y)
+  const dblClickMatch = line.match(/^dblclick\(\s*(\d+)\s*,\s*(\d+)\s*\)$/);
+  if (dblClickMatch) {
+    return {
+      type: 'dblclick',
+      x: parseInt(dblClickMatch[1], 10),
+      y: parseInt(dblClickMatch[2], 10),
+      line: lineNum,
+    } as DblClickCommand;
+  }
+
+  // rightclick(x, y)
+  const rightClickMatch = line.match(/^rightclick\(\s*(\d+)\s*,\s*(\d+)\s*\)$/);
+  if (rightClickMatch) {
+    return {
+      type: 'rightclick',
+      x: parseInt(rightClickMatch[1], 10),
+      y: parseInt(rightClickMatch[2], 10),
+      line: lineNum,
+    } as RightClickCommand;
+  }
+
+  // move(x, y)
+  const moveMatch = line.match(/^move\(\s*(\d+)\s*,\s*(\d+)\s*\)$/);
+  if (moveMatch) {
+    return {
+      type: 'move',
+      x: parseInt(moveMatch[1], 10),
+      y: parseInt(moveMatch[2], 10),
+      line: lineNum,
+    } as MoveCommand;
+  }
+
+  // drag(x1, y1, x2, y2)
+  const dragMatch = line.match(/^drag\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)$/);
+  if (dragMatch) {
+    return {
+      type: 'drag',
+      x1: parseInt(dragMatch[1], 10),
+      y1: parseInt(dragMatch[2], 10),
+      x2: parseInt(dragMatch[3], 10),
+      y2: parseInt(dragMatch[4], 10),
+      line: lineNum,
+    } as DragCommand;
+  }
+
+  // type("text") - ダブルクォートまたはシングルクォート
+  const typeMatch = line.match(/^type\(\s*["'](.*)["']\s*\)$/);
+  if (typeMatch) {
+    return {
+      type: 'type',
+      text: typeMatch[1],
+      line: lineNum,
+    } as TypeCommand;
+  }
+
+  // key("keyname")
+  const keyMatch = line.match(/^key\(\s*["'](.+)["']\s*\)$/);
+  if (keyMatch) {
+    return {
+      type: 'key',
+      keyName: keyMatch[1],
+      line: lineNum,
+    } as KeyCommand;
+  }
+
+  // shortcut("Ctrl+C")
+  const shortcutMatch = line.match(/^shortcut\(\s*["'](.+)["']\s*\)$/);
+  if (shortcutMatch) {
+    return {
+      type: 'shortcut',
+      keys: shortcutMatch[1].split('+').map((k) => k.trim()),
+      line: lineNum,
+    } as ShortcutCommand;
+  }
+
+  // wait(3s) / wait(500ms) / wait(3)
+  const waitMatch = line.match(/^wait\(\s*(\d+(?:\.\d+)?)\s*(s|ms)?\s*\)$/);
+  if (waitMatch) {
+    const value = parseFloat(waitMatch[1]);
+    const unit = waitMatch[2] || 's'; // デフォルトは秒
+    const durationMs = unit === 'ms' ? value : value * 1000;
+    return {
+      type: 'wait',
+      durationMs,
+      line: lineNum,
+    } as WaitCommand;
+  }
+
+  // 不明なコマンド
+  errors.push({
+    message: `不明なコマンドです: "${line}"（行 ${lineNum}）`,
+    line: lineNum,
+  });
+
+  return null;
+}
+
+/**
+ * 行のインデントレベルを取得（スペース2つ or タブ1つ = 1レベル）
+ */
+function getIndentLevel(line: string): number {
+  const match = line.match(/^(\s*)/);
+  if (!match) return 0;
+
+  const whitespace = match[1];
+  // タブはスペース2つ分として扱う
+  const spaces = whitespace.replace(/\t/g, '  ').length;
+  return Math.floor(spaces / 2);
+}
+
+/**
+ * ブロック内の行数をカウント
+ */
+function countBlockLines(
+  lines: string[],
+  startIndex: number,
+  minIndent: number
+): number {
+  let count = 0;
+  for (let i = startIndex; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    // 空行はブロック内としてカウント
+    if (trimmed === '') {
+      count++;
+      continue;
+    }
+
+    const indent = getIndentLevel(line);
+    if (indent < minIndent) {
+      break;
+    }
+    count++;
+  }
+  return count;
+}

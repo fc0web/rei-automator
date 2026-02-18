@@ -1,0 +1,53 @@
+{
+  "name": "rei-automator",
+  "version": "0.2.0",
+  "description": "Rei PC Automation Tool - Lightweight PC automation powered by Rei language",
+  "main": "dist/main/main.js",
+  "author": "Nobuki Fujimoto",
+  "license": "MIT",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:main\" \"npm run dev:renderer\"",
+    "dev:main": "tsc -p tsconfig.main.json && electron .",
+    "dev:renderer": "tsc -p tsconfig.renderer.json --watch",
+    "build": "npm run build:main && npm run build:renderer && npm run copy-assets",
+    "build:main": "tsc -p tsconfig.main.json",
+    "build:renderer": "tsc -p tsconfig.renderer.json",
+    "copy-assets": "node -e \"const fs=require('fs');const p=require('path');['index.html','styles.css'].forEach(f=>fs.copyFileSync(p.join('src','renderer',f),p.join('dist','renderer',f)));console.log('Assets copied.')\"",
+    "start": "electron .",
+    "start:stub": "electron . --stub",
+    "package": "electron-builder",
+    "test": "jest",
+    "lint": "eslint src --ext .ts"
+  },
+  "dependencies": {
+    "electron-store": "^8.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@typescript-eslint/eslint-plugin": "^6.13.0",
+    "@typescript-eslint/parser": "^6.13.0",
+    "concurrently": "^8.2.2",
+    "electron": "^40.4.1",
+    "electron-builder": "^26.7.0",
+    "eslint": "^8.54.0",
+    "typescript": "^5.3.2"
+  },
+  "build": {
+    "appId": "com.fujimoto.rei-automator",
+    "productName": "Rei Automator",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "assets/icon.ico"
+    }
+  }
+}

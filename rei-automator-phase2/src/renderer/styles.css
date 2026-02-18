@@ -1,0 +1,346 @@
+/**
+ * Rei Automator - Styles
+ * UIスタイルシート
+ */
+
+/* リセット */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Segoe UI', 'Yu Gothic UI', 'Meiryo UI', sans-serif;
+  background-color: #f5f5f5;
+  color: #333;
+  overflow: hidden;
+}
+
+/* コンテナ */
+.container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  padding: 0;
+}
+
+/* ヘッダー */
+.header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.header h1 {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.version {
+  font-size: 12px;
+  opacity: 0.8;
+  background: rgba(255, 255, 255, 0.2);
+  padding: 2px 8px;
+  border-radius: 12px;
+}
+
+/* ツールバー */
+.toolbar {
+  display: flex;
+  gap: 8px;
+  padding: 10px 20px;
+  background-color: #fff;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.toolbar-btn {
+  padding: 8px 16px;
+  border: 1px solid #d0d0d0;
+  border-radius: 4px;
+  background-color: #fff;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.toolbar-btn:hover:not(:disabled) {
+  background-color: #f8f8f8;
+  border-color: #667eea;
+}
+
+.toolbar-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.toolbar-separator {
+  width: 1px;
+  background-color: #e0e0e0;
+  margin: 0 8px;
+}
+
+/* セクション */
+.section {
+  padding: 16px 20px;
+  background-color: #fff;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.section-header label {
+  font-weight: 600;
+  font-size: 14px;
+  color: #555;
+}
+
+/* 入力エリア */
+.input-area {
+  width: 100%;
+  min-height: 60px;
+  padding: 10px;
+  border: 1px solid #d0d0d0;
+  border-radius: 4px;
+  font-size: 14px;
+  font-family: 'Segoe UI', 'Yu Gothic UI', 'Meiryo UI', sans-serif;
+  resize: vertical;
+  transition: border-color 0.2s;
+}
+
+.input-area:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.input-area:disabled {
+  background-color: #f5f5f5;
+  color: #999;
+}
+
+/* コードエリア */
+.code-area {
+  width: 100%;
+  min-height: 200px;
+  padding: 12px;
+  border: 1px solid #d0d0d0;
+  border-radius: 4px;
+  font-size: 14px;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  line-height: 1.6;
+  resize: vertical;
+  background-color: #fafafa;
+  transition: border-color 0.2s;
+}
+
+.code-area:focus {
+  outline: none;
+  border-color: #667eea;
+  background-color: #fff;
+}
+
+/* キャプチャセクション */
+.captures-section {
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.captures-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.capture-item {
+  padding: 8px 12px;
+  background-color: #f0f0f0;
+  border: 1px solid #d0d0d0;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.capture-item:hover {
+  background-color: #e8e8e8;
+  border-color: #667eea;
+}
+
+/* コントロール */
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  background-color: #fff;
+  border-top: 2px solid #e0e0e0;
+  margin-top: auto;
+}
+
+.btn-primary,
+.btn-danger,
+.btn-secondary,
+.btn-small {
+  padding: 10px 24px;
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-primary {
+  background-color: #667eea;
+  color: white;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background-color: #5568d3;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+}
+
+.btn-danger {
+  background-color: #f56565;
+  color: white;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background-color: #e53e3e;
+  box-shadow: 0 2px 8px rgba(245, 101, 101, 0.3);
+}
+
+.btn-secondary {
+  background-color: #718096;
+  color: white;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background-color: #4a5568;
+}
+
+.btn-small {
+  padding: 6px 12px;
+  font-size: 12px;
+  background-color: #667eea;
+  color: white;
+}
+
+.btn-small:hover:not(:disabled) {
+  background-color: #5568d3;
+}
+
+.btn-primary:disabled,
+.btn-danger:disabled,
+.btn-secondary:disabled,
+.btn-small:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ステータス */
+.status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.status-label {
+  font-size: 13px;
+  color: #666;
+}
+
+.status-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: #667eea;
+  padding: 4px 12px;
+  background-color: #f0f4ff;
+  border-radius: 12px;
+}
+
+.status-text.running {
+  color: #48bb78;
+  background-color: #f0fff4;
+}
+
+.status-text.error {
+  color: #f56565;
+  background-color: #fff5f5;
+}
+
+/* フッター */
+.footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 20px;
+  background-color: #f8f8f8;
+  border-top: 1px solid #e0e0e0;
+  font-size: 12px;
+  color: #666;
+}
+
+/* 実行ログ */
+.log-area {
+  height: 120px;
+  overflow-y: auto;
+  background-color: #1e1e1e;
+  color: #d4d4d4;
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 12px;
+  padding: 8px;
+  border: 1px solid #333;
+  border-radius: 4px;
+}
+
+.log-entry {
+  padding: 1px 0;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.log-error {
+  color: #f44747;
+}
+
+.log-warn {
+  color: #cca700;
+}
+
+.log-info {
+  color: #d4d4d4;
+}
+
+.log-debug {
+  color: #888;
+}
+
+/* スクロールバー */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
