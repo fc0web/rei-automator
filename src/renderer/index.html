@@ -70,6 +70,17 @@
       </div>
     </div>
 
+    <!-- 実行ログ -->
+    <div class="section">
+      <div class="section-header">
+        <label>実行ログ:</label>
+        <button id="btn-clear-log" class="btn-small" onclick="document.getElementById('log-area').innerHTML=''">
+          🗑 クリア
+        </button>
+      </div>
+      <div id="log-area" class="log-area"></div>
+    </div>
+
     <!-- 実行コントロール -->
     <div class="controls">
       <button id="btn-execute" class="btn-primary">

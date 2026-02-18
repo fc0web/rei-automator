@@ -291,6 +291,41 @@ body {
   color: #666;
 }
 
+/* 実行ログ */
+.log-area {
+  height: 120px;
+  overflow-y: auto;
+  background-color: #1e1e1e;
+  color: #d4d4d4;
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 12px;
+  padding: 8px;
+  border: 1px solid #333;
+  border-radius: 4px;
+}
+
+.log-entry {
+  padding: 1px 0;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.log-error {
+  color: #f44747;
+}
+
+.log-warn {
+  color: #cca700;
+}
+
+.log-info {
+  color: #d4d4d4;
+}
+
+.log-debug {
+  color: #888;
+}
+
 /* スクロールバー */
 ::-webkit-scrollbar {
   width: 8px;
