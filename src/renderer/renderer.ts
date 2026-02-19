@@ -28,6 +28,13 @@ interface ReiAPI {
   errorClear: () => Promise<void>;
   dialogSaveFile: (defaultName: string) => Promise<string | null>;
   dialogOpenFile: () => Promise<string | null>;
+  // Phase 7: Scheduler
+  scheduleList: () => Promise<ScheduleItem[]>;
+  scheduleCreate: (params: ScheduleCreateParams) => Promise<ScheduleItem>;
+  scheduleDelete: (id: string) => Promise<boolean>;
+  scheduleToggle: (id: string) => Promise<ScheduleItem>;
+  onScheduleEvent: (cb: (data: ScheduleEvent) => void) => void;
+  onScheduleRunning: (cb: (data: { scheduleName: string; scriptName: string }) => void) => void;
   onLogEntry: (cb: (entry: LogEntry) => void) => void;
   onStepPause: (cb: (entry: LogEntry) => void) => void;
 }
@@ -42,6 +49,23 @@ interface ScriptHistory { scriptId: string; executedAt: string; duration: number
 interface LogEntry { id: string; timestamp: string; level: string; message: string; lineNumber?: number; command?: string; variables?: Record<string, unknown>; }
 interface ErrorDetail { lineNumber: number; line: string; command: string; message: string; retryCount?: number; }
 interface ParamDef { name: string; defaultValue: string | number | boolean; description?: string; type: string; }
+
+// Phase 7: Schedule types
+interface ScheduleItem {
+  id: string; name: string; scriptId: string; scriptName: string;
+  enabled: boolean; type: 'once' | 'interval' | 'daily' | 'weekly';
+  runAt?: string; intervalMinutes?: number; dailyTime?: string;
+  weeklyDay?: number; weeklyTime?: string;
+  lastRun?: string; lastResult?: 'success' | 'error'; lastError?: string;
+  nextRun?: string; createdAt: string;
+}
+interface ScheduleCreateParams {
+  name: string; scriptId: string; scriptName: string;
+  type: 'once' | 'interval' | 'daily' | 'weekly';
+  runAt?: string; intervalMinutes?: number; dailyTime?: string;
+  weeklyDay?: number; weeklyTime?: string;
+}
+interface ScheduleEvent { scheduleId: string; name: string; event: string; detail?: string; }
 
 // ============================================================
 // 状態管理
@@ -58,6 +82,7 @@ const state = {
   variables: {} as Record<string, unknown>,
   params: [] as ParamDef[],
   activePanel: 'log' as string,
+  schedules: [] as ScheduleItem[],
 };
 
 // ============================================================
@@ -122,6 +147,24 @@ const el = {
   btnModalSaveConfirm: document.getElementById('btn-modal-save-confirm') as HTMLButtonElement,
   // Toast
   toastContainer: document.getElementById('toast-container') as HTMLElement,
+  // Phase 7: Schedule
+  panelSchedule: document.getElementById('panel-schedule') as HTMLElement,
+  scheduleList: document.getElementById('schedule-list') as HTMLElement,
+  btnScheduleAdd: document.getElementById('btn-schedule-add') as HTMLButtonElement,
+  modalSchedule: document.getElementById('modal-schedule') as HTMLElement,
+  schedName: document.getElementById('sched-name') as HTMLInputElement,
+  schedScript: document.getElementById('sched-script') as HTMLSelectElement,
+  schedType: document.getElementById('sched-type') as HTMLSelectElement,
+  schedRunAt: document.getElementById('sched-run-at') as HTMLInputElement,
+  schedInterval: document.getElementById('sched-interval') as HTMLInputElement,
+  schedDailyTime: document.getElementById('sched-daily-time') as HTMLInputElement,
+  schedWeeklyDay: document.getElementById('sched-weekly-day') as HTMLSelectElement,
+  schedWeeklyTime: document.getElementById('sched-weekly-time') as HTMLInputElement,
+  schedOptOnce: document.getElementById('sched-opt-once') as HTMLElement,
+  schedOptInterval: document.getElementById('sched-opt-interval') as HTMLElement,
+  schedOptDaily: document.getElementById('sched-opt-daily') as HTMLElement,
+  schedOptWeekly: document.getElementById('sched-opt-weekly') as HTMLElement,
+  btnSchedConfirm: document.getElementById('btn-sched-confirm') as HTMLButtonElement,
 };
 
 // ============================================================
@@ -505,14 +548,16 @@ function switchPanel(name: string): void {
   el.panelTabs.forEach(tab => {
     tab.classList.toggle('active', (tab as HTMLElement).dataset.panel === name);
   });
-  [el.panelLog, el.panelVars, el.panelErrors, el.panelHistory].forEach(p => {
+  [el.panelLog, el.panelVars, el.panelErrors, el.panelHistory, el.panelSchedule].forEach(p => {
     p.classList.remove('active');
   });
   const panelMap: Record<string, HTMLElement> = {
     log: el.panelLog, vars: el.panelVars,
     errors: el.panelErrors, history: el.panelHistory,
+    schedule: el.panelSchedule,
   };
   panelMap[name]?.classList.add('active');
+  if (name === 'schedule') loadScheduleList();
 }
 
 // ============================================================
@@ -525,6 +570,120 @@ function escapeHtml(str: string): string {
 (window as unknown as Record<string, unknown>).copyToClipboard = (text: string) => {
   navigator.clipboard.writeText(text).then(() => showToast(`クリップボードにコピー: ${text}`));
 };
+
+// ============================================================
+// Phase 7: スケジュール管理
+// ============================================================
+const DAY_NAMES = ['日', '月', '火', '水', '木', '金', '土'];
+
+async function loadScheduleList(): Promise<void> {
+  state.schedules = await window.reiAPI.scheduleList();
+  renderScheduleList();
+}
+
+function renderScheduleList(): void {
+  if (state.schedules.length === 0) {
+    el.scheduleList.innerHTML = '<div class="log-empty">スケジュールはありません</div>';
+    return;
+  }
+
+  el.scheduleList.innerHTML = state.schedules.map(s => {
+    const typeLabel = { once: '1回のみ', interval: `${s.intervalMinutes}分間隔`, daily: `毎日 ${s.dailyTime}`, weekly: `毎週${DAY_NAMES[s.weeklyDay ?? 0]} ${s.weeklyTime}` }[s.type] || s.type;
+    const statusIcon = s.enabled ? '🟢' : '⏸️';
+    const lastRunText = s.lastRun ? new Date(s.lastRun).toLocaleString('ja-JP') : '未実行';
+    const lastResultIcon = s.lastResult === 'success' ? '✅' : s.lastResult === 'error' ? '❌' : '';
+    const nextRunText = s.nextRun ? new Date(s.nextRun).toLocaleString('ja-JP') : '-';
+
+    return `
+      <div class="schedule-row ${s.enabled ? '' : 'disabled'}">
+        <div class="schedule-main">
+          <span class="schedule-status">${statusIcon}</span>
+          <div class="schedule-info">
+            <strong>${escapeHtml(s.name)}</strong>
+            <span class="schedule-meta">📝 ${escapeHtml(s.scriptName)} | ${typeLabel}</span>
+            <span class="schedule-meta">前回: ${lastResultIcon} ${lastRunText} | 次回: ${nextRunText}</span>
+          </div>
+        </div>
+        <div class="schedule-actions">
+          <button class="small-btn sched-toggle-btn" data-id="${s.id}" title="${s.enabled ? '無効化' : '有効化'}">${s.enabled ? '⏸' : '▶'}</button>
+          <button class="small-btn sched-delete-btn" data-id="${s.id}" title="削除">🗑</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // トグルボタン
+  el.scheduleList.querySelectorAll('.sched-toggle-btn').forEach((btn: any) => {
+    btn.addEventListener('click', async () => {
+      await window.reiAPI.scheduleToggle(btn.dataset.id);
+      await loadScheduleList();
+    });
+  });
+
+  // 削除ボタン
+  el.scheduleList.querySelectorAll('.sched-delete-btn').forEach((btn: any) => {
+    btn.addEventListener('click', async () => {
+      if (confirm('このスケジュールを削除しますか？')) {
+        await window.reiAPI.scheduleDelete(btn.dataset.id);
+        await loadScheduleList();
+        showToast('スケジュールを削除しました');
+      }
+    });
+  });
+}
+
+function openScheduleModal(): void {
+  el.schedName.value = '';
+  el.schedScript.innerHTML = '<option value="">-- スクリプトを選択 --</option>' +
+    state.scripts.map(s => `<option value="${s.id}" data-name="${escapeHtml(s.name)}">${escapeHtml(s.name)}</option>`).join('');
+  el.schedType.value = 'once';
+  updateScheduleTypeOptions();
+  el.modalSchedule.hidden = false;
+  el.schedName.focus();
+}
+
+function updateScheduleTypeOptions(): void {
+  const type = el.schedType.value;
+  el.schedOptOnce.hidden = type !== 'once';
+  el.schedOptInterval.hidden = type !== 'interval';
+  el.schedOptDaily.hidden = type !== 'daily';
+  el.schedOptWeekly.hidden = type !== 'weekly';
+}
+
+async function createSchedule(): Promise<void> {
+  const name = el.schedName.value.trim();
+  const scriptId = el.schedScript.value;
+  const selectedOption = el.schedScript.options[el.schedScript.selectedIndex];
+  const scriptName = selectedOption?.dataset?.name || selectedOption?.textContent || '';
+  const type = el.schedType.value as 'once' | 'interval' | 'daily' | 'weekly';
+
+  if (!name) { showToast('スケジュール名を入力してください', 'warn'); return; }
+  if (!scriptId) { showToast('スクリプトを選択してください', 'warn'); return; }
+
+  const params: ScheduleCreateParams = { name, scriptId, scriptName, type };
+
+  switch (type) {
+    case 'once':
+      if (!el.schedRunAt.value) { showToast('実行日時を設定してください', 'warn'); return; }
+      params.runAt = new Date(el.schedRunAt.value).toISOString();
+      break;
+    case 'interval':
+      params.intervalMinutes = parseInt(el.schedInterval.value, 10) || 30;
+      break;
+    case 'daily':
+      params.dailyTime = el.schedDailyTime.value;
+      break;
+    case 'weekly':
+      params.weeklyDay = parseInt(el.schedWeeklyDay.value, 10);
+      params.weeklyTime = el.schedWeeklyTime.value;
+      break;
+  }
+
+  await window.reiAPI.scheduleCreate(params);
+  el.modalSchedule.hidden = true;
+  await loadScheduleList();
+  showToast(`スケジュール「${name}」を作成しました`);
+}
 
 // ============================================================
 // イベントリスナー登録
@@ -668,6 +827,33 @@ function initEventListeners(): void {
     await window.reiAPI.errorSetPolicy(el.errorPolicy.value);
   });
 
+  // ---- Phase 7: スケジュール ----
+  el.btnScheduleAdd.addEventListener('click', openScheduleModal);
+  el.schedType.addEventListener('change', updateScheduleTypeOptions);
+  el.btnSchedConfirm.addEventListener('click', createSchedule);
+
+  // ---- IPC イベント受信 ----
+  window.reiAPI.onScheduleEvent((data: ScheduleEvent) => {
+    if (data.event === 'started') {
+      showToast(`⏰ スケジュール「${data.name}」を実行中...`, 'success');
+    } else if (data.event === 'completed') {
+      showToast(`✅ スケジュール「${data.name}」が完了しました`, 'success');
+      if (state.activePanel === 'schedule') loadScheduleList();
+    } else if (data.event === 'error') {
+      showToast(`❌ スケジュール「${data.name}」でエラー: ${data.detail}`, 'error');
+      if (state.activePanel === 'schedule') loadScheduleList();
+    }
+  });
+
+  window.reiAPI.onScheduleRunning((data: { scheduleName: string; scriptName: string }) => {
+    appendLogEntry({
+      id: 'sched_' + Date.now(),
+      timestamp: new Date().toISOString(),
+      level: 'info',
+      message: `⏰ スケジュール「${data.scheduleName}」→ スクリプト「${data.scriptName}」実行開始`,
+    });
+  });
+
   // ---- IPC イベント受信 ----
   window.reiAPI.onLogEntry((entry: LogEntry) => {
     appendLogEntry(entry);
@@ -693,7 +879,7 @@ async function init(): Promise<void> {
   initEventListeners();
   await loadScriptList();
   await loadHistory();
-  showToast('Phase 6 起動完了 🚀');
+  showToast('Phase 7 起動完了 🚀');
 }
 
 init().catch(console.error);

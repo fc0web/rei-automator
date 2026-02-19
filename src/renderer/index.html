@@ -14,7 +14,7 @@
       <div class="header-left">
         <span class="app-logo">⚡</span>
         <span class="app-title">Rei Automator</span>
-        <span class="phase-badge">Phase 6</span>
+        <span class="phase-badge">Phase 7</span>
       </div>
       <div class="header-center">
         <span id="current-script-name" class="current-script">無題のスクリプト</span>
@@ -131,6 +131,7 @@
             <button class="panel-tab" data-panel="vars">🔤 変数一覧</button>
             <button class="panel-tab" data-panel="errors">❌ エラー一覧</button>
             <button class="panel-tab" data-panel="history">📅 実行履歴</button>
+            <button class="panel-tab" data-panel="schedule">⏰ スケジュール</button>
             <div class="tab-actions">
               <button id="btn-log-clear" class="tab-action-btn" title="ログをクリア">🗑</button>
               <button id="btn-log-export" class="tab-action-btn" title="ログをエクスポート">💾</button>
@@ -179,6 +180,16 @@
               <div class="log-empty">履歴はありません</div>
             </div>
           </div>
+
+          <!-- Phase 7: スケジュールパネル -->
+          <div id="panel-schedule" class="panel-content">
+            <div class="schedule-toolbar">
+              <button id="btn-schedule-add" class="small-btn">+ スケジュール追加</button>
+            </div>
+            <div id="schedule-list" class="schedule-list">
+              <div class="log-empty">スケジュールはありません</div>
+            </div>
+          </div>
         </div>
 
       </main>
@@ -223,6 +234,71 @@
 
   <!-- ========== トースト通知 ========== -->
   <div id="toast-container" class="toast-container"></div>
+
+  <!-- ========== Phase 7: スケジュール作成モーダル ========== -->
+  <div id="modal-schedule" class="modal" hidden>
+    <div class="modal-content">
+      <div class="modal-header">
+        <span>⏰ スケジュール作成</span>
+        <button class="modal-close icon-btn">✕</button>
+      </div>
+      <div class="modal-body">
+        <label>スケジュール名</label>
+        <input id="sched-name" type="text" placeholder="例: 日次レポート自動化" />
+
+        <label>対象スクリプト</label>
+        <select id="sched-script" class="control-select wide">
+          <option value="">-- スクリプトを選択 --</option>
+        </select>
+
+        <label>実行タイプ</label>
+        <select id="sched-type" class="control-select wide">
+          <option value="once">1回のみ（指定日時）</option>
+          <option value="interval">間隔（N分ごと）</option>
+          <option value="daily">毎日（指定時刻）</option>
+          <option value="weekly">毎週（指定曜日・時刻）</option>
+        </select>
+
+        <!-- once: 日時 -->
+        <div id="sched-opt-once" class="sched-option">
+          <label>実行日時</label>
+          <input id="sched-run-at" type="datetime-local" />
+        </div>
+
+        <!-- interval: 分 -->
+        <div id="sched-opt-interval" class="sched-option" hidden>
+          <label>間隔（分）</label>
+          <input id="sched-interval" type="number" min="1" value="30" />
+        </div>
+
+        <!-- daily: 時刻 -->
+        <div id="sched-opt-daily" class="sched-option" hidden>
+          <label>実行時刻</label>
+          <input id="sched-daily-time" type="time" value="09:00" />
+        </div>
+
+        <!-- weekly: 曜日 + 時刻 -->
+        <div id="sched-opt-weekly" class="sched-option" hidden>
+          <label>曜日</label>
+          <select id="sched-weekly-day" class="control-select wide">
+            <option value="1">月曜日</option>
+            <option value="2">火曜日</option>
+            <option value="3">水曜日</option>
+            <option value="4">木曜日</option>
+            <option value="5">金曜日</option>
+            <option value="6">土曜日</option>
+            <option value="0">日曜日</option>
+          </select>
+          <label>実行時刻</label>
+          <input id="sched-weekly-time" type="time" value="09:00" />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="btn-sched-confirm" class="run-btn">作成</button>
+        <button class="modal-close cancel-btn">キャンセル</button>
+      </div>
+    </div>
+  </div>
 
   <script src="renderer.js"></script>
 </body>

@@ -57,3 +57,6 @@ temp/
 *.tmp
 
 templates/
+
+# electron-builder output
+/dist

@@ -136,6 +136,22 @@ contextBridge.exposeInMainWorld('reiAPI', {
   dialogSaveFile: (defaultName: string) => ipcRenderer.invoke('dialog:save-file', defaultName),
   dialogOpenFile: () => ipcRenderer.invoke('dialog:open-file'),
 
+  // Scheduler (Phase 7)
+  scheduleList: () => ipcRenderer.invoke('schedule:list'),
+  scheduleCreate: (params: {
+    name: string; scriptId: string; scriptName: string;
+    type: string; runAt?: string; intervalMinutes?: number;
+    dailyTime?: string; weeklyDay?: number; weeklyTime?: string;
+  }) => ipcRenderer.invoke('schedule:create', params),
+  scheduleUpdate: (id: string, params: Record<string, unknown>) =>
+    ipcRenderer.invoke('schedule:update', id, params),
+  scheduleDelete: (id: string) => ipcRenderer.invoke('schedule:delete', id),
+  scheduleToggle: (id: string) => ipcRenderer.invoke('schedule:toggle', id),
+  onScheduleEvent: (callback: (data: unknown) => void) =>
+    ipcRenderer.on('schedule:event', (_event, data) => callback(data)),
+  onScheduleRunning: (callback: (data: unknown) => void) =>
+    ipcRenderer.on('schedule:running', (_event, data) => callback(data)),
+
   // IPC Events
   onLogEntry: (callback: (entry: unknown) => void) =>
     ipcRenderer.on('log:entry', (_event, entry) => callback(entry)),

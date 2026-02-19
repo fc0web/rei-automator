@@ -19,7 +19,6 @@ export class ReiExecutor {
   private runtime: ReiRuntime;
   private window: BrowserWindow | null = null;
   private logger: Logger | null = null;
-  private errorHandler: ErrorHandler | null = null;
   private varStore: VariableStore = new VariableStore();
   private useStub: boolean;
 
@@ -54,11 +53,11 @@ export class ReiExecutor {
         console.log(`[Rei Status] ${status}`);
         this.sendToRenderer('execution-status', status);
       },
-      onLineExecute: async (line) => {
+      onLineExecute: (line) => {
         this.sendToRenderer('execution-line', line);
-        // ステップ実行: awaitでlogStep内の一時停止Promiseを待機
+        // ログエントリ送信
         if (this.logger) {
-          await this.logger.logStep(line, 'executing', this.varStore.getAll());
+          this.logger.logStep(line, 'executing', this.varStore.getAll());
         }
         // 変数状態をリアルタイム送信
         this.sendToRenderer('log:entry', {
@@ -82,9 +81,8 @@ export class ReiExecutor {
   setLogger(logger: Logger): void {
     this.logger = logger;
   }
-
   setErrorHandler(handler: ErrorHandler): void {
-    this.errorHandler = handler;
+    this.runtime.setErrorHandler(handler);
   }
 
   /**
@@ -98,18 +96,6 @@ export class ReiExecutor {
     this.varStore.clear();
     const processedLines = code.split('\n').map((line) => preprocessLine(line, this.varStore));
     const processedCode = processedLines.filter((l) => l !== '__SET__' && l !== '__PARAM__').join('\n');
-
-    // set命令で設定された変数をUIへ即時送信（コマンドがなくても表示されるように）
-    const initialVars = this.varStore.getAll();
-    if (Object.keys(initialVars).length > 0) {
-      this.sendToRenderer('log:entry', {
-        id: 'vars_init_' + Date.now(),
-        timestamp: new Date().toISOString(),
-        level: 'info',
-        message: '変数を初期化しました',
-        variables: initialVars,
-      });
-    }
     if (this.logger) this.logger.startSession('script');
     // パース
     const program = parse(processedCode);

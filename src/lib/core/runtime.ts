@@ -15,6 +15,7 @@ import {
 import { AutoController } from '../auto/controller';
 import { ImageMatcher } from '../auto/image-matcher';
 import { OcrEngine } from '../auto/ocr';
+import { ErrorHandler } from './error-handler';
 
 /**
  * Reiプログラムの実行エンジン
@@ -23,6 +24,7 @@ export class ReiRuntime {
   private context: ExecutionContext;
   private controller: AutoController;
   private abortController: AbortController | null = null;
+  private errorHandler: ErrorHandler | null = null;
 
   // Phase 4: 画像認識
   private findState: FindState = {
@@ -65,6 +67,11 @@ export class ReiRuntime {
     this.ocrEngine = engine;
   }
 
+  // ── Phase 6: ErrorHandler注入メソッド ───────────────────
+  setErrorHandler(handler: ErrorHandler): void {
+    this.errorHandler = handler;
+  }
+
   getLastText(): string {
     return this.lastText;
   }
@@ -75,7 +82,7 @@ export class ReiRuntime {
   setCallbacks(callbacks: {
     onLog?: (message: string, level: string) => void;
     onStatusChange?: (status: ExecutionStatus) => void;
-    onLineExecute?: (line: number) => void | Promise<void>;
+    onLineExecute?: (line: number) => void;
   }) {
     if (callbacks.onLog) this.context.onLog = callbacks.onLog;
     if (callbacks.onStatusChange) this.context.onStatusChange = callbacks.onStatusChange;
@@ -114,6 +121,7 @@ export class ReiRuntime {
     this.context.paused = false;
     this.context.currentLine = 0;
     this.context.onStatusChange('running');
+    if (this.errorHandler) this.errorHandler.clearErrors();
 
     const startTime = Date.now();
     let executedLines = 0;
@@ -155,6 +163,21 @@ export class ReiRuntime {
         return {
           success: true,
           message: '実行が停止されました',
+          executedLines,
+          totalTime,
+        };
+      }
+
+      // Phase 6: ExecutionError の場合はフォーマット済みメッセージを使用
+      if (error.name === 'ExecutionError' && this.errorHandler) {
+        const detail = error.detail;
+        const formatted = this.errorHandler.formatError(detail);
+        const suggestion = this.errorHandler.getSuggestion(detail);
+        this.context.onLog(`${formatted}\n${suggestion}`, 'error');
+        this.context.onStatusChange('error');
+        return {
+          success: false,
+          error: `行${detail.lineNumber}: ${detail.message}`,
           executedLines,
           totalTime,
         };
@@ -232,12 +255,23 @@ export class ReiRuntime {
       // コメントはスキップ
       if (command.type === 'comment') continue;
 
-      // 行番号を通知（awaitでステップ実行の一時停止を待機）
+      // 行番号を通知
       this.context.currentLine = command.line;
-      await this.context.onLineExecute(command.line);
+      this.context.onLineExecute(command.line);
 
-      // コマンドを実行
-      await this.executeCommand(command);
+      // コマンドを実行（ErrorHandler経由またはダイレクト）
+      if (this.errorHandler) {
+        const result = await this.errorHandler.executeWithPolicy(
+          command.line,
+          `${command.type}`,  // line text
+          command.type,       // command name
+          () => this.executeCommand(command)
+        );
+        // result === null の場合は skip ポリシーでエラーがスキップされた
+        // ExecutionError が throw された場合は上位の execute() の catch で処理
+      } else {
+        await this.executeCommand(command);
+      }
       executed++;
     }
 

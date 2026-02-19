@@ -75,26 +75,24 @@ function setupIpcHandlers(): void {
       return { success: false, error: '既に実行中です' };
     }
 
-    // 実行完了まで待機（ステップ実行中もIPCは別チャンネルで継続可能）
-    try {
-      const result = await executor.execute(code);
+    // 非同期実行（UIをブロックしない）
+    executor.execute(code).then((result) => {
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('execution-complete', result);
       }
-      return result;
-    } catch (error: any) {
+    }).catch((error) => {
       console.error('[Main] Execution error:', error);
-      const result = {
-        success: false,
-        error: error.message,
-        executedLines: 0,
-        totalTime: 0,
-      };
       if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('execution-complete', result);
+        mainWindow.webContents.send('execution-complete', {
+          success: false,
+          error: error.message,
+          executedLines: 0,
+          totalTime: 0,
+        });
       }
-      return result;
-    }
+    });
+
+    return { success: true, message: 'Execution started' };
   });
 
   // 停止
@@ -316,6 +314,45 @@ function setupIpcHandlers(): void {
   ipcMain.handle('dialog:save-file', async (_e, defaultName) => { if (!mainWindow) return null; const {dialog} = require('electron'); const r = await dialog.showSaveDialog(mainWindow, {defaultPath:defaultName, filters:[{name:'Rei Script',extensions:['rei','txt']}]}); return r.canceled ? null : r.filePath; });
   ipcMain.handle('dialog:open-file', async () => { if (!mainWindow) return null; const {dialog} = require('electron'); const r = await dialog.showOpenDialog(mainWindow, {filters:[{name:'Rei Script',extensions:['rei','txt']}],properties:['openFile']}); return r.canceled ? null : r.filePaths[0]; });
 
+  // ========== Phase 7: スケジューラー ==========
+  const { Scheduler } = require('../lib/core/scheduler');
+  const scheduler = new Scheduler();
+
+  // スケジュール実行コールバック: scriptId からスクリプトを読み込んで実行
+  scheduler.setExecutor(async (scriptId: string, scheduleName: string) => {
+    const script = scriptManager.loadScript(scriptId);
+    if (!script) return { success: false, error: 'スクリプトが見つかりません' };
+    if (!executor) return { success: false, error: 'Executor未初期化' };
+    if (executor.isRunning()) return { success: false, error: '別のスクリプトが実行中です' };
+
+    console.log(`[Scheduler] Running "${scheduleName}" → script "${script.name}"`);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('schedule:running', { scheduleName, scriptName: script.name });
+    }
+
+    const result = await executor.execute(script.content);
+    scriptManager.recordExecution(scriptId, result.totalTime, result.success, result.error);
+
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('execution-complete', result);
+    }
+    return { success: result.success, error: result.error };
+  });
+
+  // スケジュール通知コールバック
+  scheduler.setNotifier((schedule: any, event: string, detail?: string) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('schedule:event', { scheduleId: schedule.id, name: schedule.name, event, detail });
+    }
+  });
+
+  // スケジューラー IPC
+  ipcMain.handle('schedule:list', async () => scheduler.list());
+  ipcMain.handle('schedule:create', async (_e, params) => scheduler.create(params));
+  ipcMain.handle('schedule:update', async (_e, id, params) => scheduler.update(id, params));
+  ipcMain.handle('schedule:delete', async (_e, id) => scheduler.delete(id));
+  ipcMain.handle('schedule:toggle', async (_e, id) => scheduler.toggle(id));
+
 app.whenReady().then(() => {
   const useStub = process.argv.includes('--stub');
   executor = new ReiExecutor(useStub);
@@ -340,6 +377,7 @@ app.whenReady().then(() => {
   setupIpcHandlers();
   createMainWindow();
   registerGlobalShortcuts();
+  scheduler.startAll();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -355,5 +393,6 @@ app.on('window-all-closed', () => {
 
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
+  scheduler.stopAll();
   if (executor && executor.isRunning()) executor.stop();
 });
