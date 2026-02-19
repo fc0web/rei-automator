@@ -3,7 +3,7 @@
  * Electron メインプロセス
  */
 
-import { app, BrowserWindow, ipcMain, globalShortcut } from 'electron';
+import { app, BrowserWindow, ipcMain, globalShortcut, Menu, shell } from 'electron';
 import * as path from 'path';
 import { ReiExecutor } from './executor';
 import { FileManager } from './file-manager';
@@ -353,6 +353,76 @@ function setupIpcHandlers(): void {
   ipcMain.handle('schedule:delete', async (_e, id) => scheduler.delete(id));
   ipcMain.handle('schedule:toggle', async (_e, id) => scheduler.toggle(id));
 
+
+// ── 日本語メニュー定義 ──
+function setupApplicationMenu(): void {
+  const template: Electron.MenuItemConstructorOptions[] = [
+    {
+      label: 'ファイル',
+      submenu: [
+        { label: '新規スクリプト', accelerator: 'CmdOrCtrl+N', click: () => mainWindow?.webContents.send('menu-action', 'new-script') },
+        { label: '開く...', accelerator: 'CmdOrCtrl+O', click: () => mainWindow?.webContents.send('menu-action', 'open-script') },
+        { type: 'separator' },
+        { label: '保存', accelerator: 'CmdOrCtrl+S', click: () => mainWindow?.webContents.send('menu-action', 'save-script') },
+        { label: '名前を付けて保存...', accelerator: 'CmdOrCtrl+Shift+S', click: () => mainWindow?.webContents.send('menu-action', 'save-as-script') },
+        { type: 'separator' },
+        { label: '終了', accelerator: 'Alt+F4', role: 'quit' }
+      ]
+    },
+    {
+      label: '編集',
+      submenu: [
+        { label: '元に戻す', accelerator: 'CmdOrCtrl+Z', role: 'undo' },
+        { label: 'やり直し', accelerator: 'CmdOrCtrl+Y', role: 'redo' },
+        { type: 'separator' },
+        { label: '切り取り', accelerator: 'CmdOrCtrl+X', role: 'cut' },
+        { label: 'コピー', accelerator: 'CmdOrCtrl+C', role: 'copy' },
+        { label: '貼り付け', accelerator: 'CmdOrCtrl+V', role: 'paste' },
+        { type: 'separator' },
+        { label: 'すべて選択', accelerator: 'CmdOrCtrl+A', role: 'selectAll' }
+      ]
+    },
+    {
+      label: '表示',
+      submenu: [
+        { label: '拡大', accelerator: 'CmdOrCtrl+Plus', role: 'zoomIn' },
+        { label: '縮小', accelerator: 'CmdOrCtrl+-', role: 'zoomOut' },
+        { label: 'リセット', accelerator: 'CmdOrCtrl+0', role: 'resetZoom' },
+        { type: 'separator' },
+        { label: '全画面表示', accelerator: 'F11', role: 'togglefullscreen' },
+        { type: 'separator' },
+        { label: '開発者ツール', accelerator: 'F12', role: 'toggleDevTools' }
+      ]
+    },
+    {
+      label: 'ウィンドウ',
+      submenu: [
+        { label: '最小化', role: 'minimize' },
+        { label: '閉じる', role: 'close' }
+      ]
+    },
+    {
+      label: 'ヘルプ',
+      submenu: [
+        { label: 'Rei Automator について', click: () => {
+          const { dialog } = require('electron');
+          dialog.showMessageBox(mainWindow!, {
+            type: 'info',
+            title: 'Rei Automator について',
+            message: 'Rei Automator v0.4.0',
+            detail: '軽量PC自動操作ツール\nPowered by Rei Language\n\nCopyright © 2024-2026 Nobuki Fujimoto',
+            buttons: ['OK']
+          });
+        }},
+        { type: 'separator' },
+        { label: 'GitHubリポジトリ', click: () => shell.openExternal('https://github.com/fc0web/rei-automator') },
+        { label: 'Rei言語について', click: () => shell.openExternal('https://www.npmjs.com/package/rei-lang') }
+      ]
+    }
+  ];
+  const menu = Menu.buildFromTemplate(template);
+  Menu.setApplicationMenu(menu);
+}
 app.whenReady().then(() => {
   const useStub = process.argv.includes('--stub');
   executor = new ReiExecutor(useStub);
@@ -374,6 +444,7 @@ app.whenReady().then(() => {
     });
   }
 
+  setupApplicationMenu();
   setupIpcHandlers();
   createMainWindow();
   registerGlobalShortcuts();
