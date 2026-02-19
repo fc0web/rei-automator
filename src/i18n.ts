@@ -7,6 +7,8 @@
  *   i18n.init();
  *   const label = t('menu.file');        // → "ファイル"
  *   const msg = t('error.executionFailed', { message: 'timeout' });
+ *
+ * 言語設定は自動的に永続化され、次回起動時に復元されます。
  */
 
 import * as fs from 'fs';
@@ -21,6 +23,10 @@ interface LanguageInfo {
   direction: string;
 }
 
+interface UserSettings {
+  language?: string;
+}
+
 type Translations = Record<string, string>;
 type LanguageChangeCallback = (lang: string) => void;
 
@@ -29,6 +35,41 @@ let currentLang = 'ja';
 let translations: Translations = {};
 let fallbackTranslations: Translations = {}; // en をフォールバックとして保持
 const changeCallbacks: LanguageChangeCallback[] = [];
+
+// ── ユーザー設定の永続化 ──
+function getSettingsPath(): string {
+  return path.join(app.getPath('userData'), 'settings.json');
+}
+
+function loadSettings(): UserSettings {
+  try {
+    const filePath = getSettingsPath();
+    if (fs.existsSync(filePath)) {
+      const raw = fs.readFileSync(filePath, 'utf-8');
+      return JSON.parse(raw);
+    }
+  } catch (e) {
+    console.warn('[i18n] Failed to load settings:', e);
+  }
+  return {};
+}
+
+function saveSettings(settings: UserSettings): void {
+  try {
+    const filePath = getSettingsPath();
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    // 既存設定とマージ
+    const existing = loadSettings();
+    const merged = { ...existing, ...settings };
+    fs.writeFileSync(filePath, JSON.stringify(merged, null, 2), 'utf-8');
+    console.log(`[i18n] Settings saved: ${filePath}`);
+  } catch (e) {
+    console.warn('[i18n] Failed to save settings:', e);
+  }
+}
 
 // ── ロケールファイルのパスを解決 ──
 function getLocalesDir(): string {
@@ -63,21 +104,28 @@ function loadTranslationsForLang(lang: string): Translations {
 // ── 公開API ──
 const i18n = {
   /**
-   * 初期化: システムロケールまたは保存済み設定から言語を決定
+   * 初期化: 保存済み設定 → システムロケール → フォールバック の優先順で言語を決定
    */
   init(): void {
-    // electron-store等で保存済みの言語設定を読み込む（将来拡張）
-    // デフォルトはシステムロケールから推測
-    const sysLocale = app.getLocale(); // e.g. "ja", "en-US", "zh-CN"
     const supported = this.getSupportedLanguages().map(l => l.code);
 
-    // 完全一致 → 言語コード一致 → フォールバック
-    if (supported.includes(sysLocale)) {
-      currentLang = sysLocale;
+    // 1. 保存済みの言語設定を確認
+    const settings = loadSettings();
+    if (settings.language && supported.includes(settings.language)) {
+      currentLang = settings.language;
+      console.log(`[i18n] Restored saved language: ${currentLang}`);
     } else {
-      const langPrefix = sysLocale.split('-')[0];
-      const match = supported.find(s => s.startsWith(langPrefix));
-      currentLang = match || 'ja';
+      // 2. システムロケールから推測
+      const sysLocale = app.getLocale(); // e.g. "ja", "en-US", "zh-CN"
+
+      // 完全一致 → 言語コード一致 → フォールバック
+      if (supported.includes(sysLocale)) {
+        currentLang = sysLocale;
+      } else {
+        const langPrefix = sysLocale.split('-')[0];
+        const match = supported.find(s => s.startsWith(langPrefix));
+        currentLang = match || 'ja';
+      }
     }
 
     // 翻訳データロード
@@ -95,7 +143,7 @@ const i18n = {
   },
 
   /**
-   * 言語を変更
+   * 言語を変更し、設定を永続化
    */
   setLanguage(lang: string): void {
     if (lang === currentLang) return;
@@ -106,6 +154,10 @@ const i18n = {
     }
     currentLang = lang;
     translations = loadTranslationsForLang(lang);
+
+    // 設定を永続化
+    saveSettings({ language: lang });
+
     console.log(`[i18n] Language changed to: ${lang}`);
     changeCallbacks.forEach(cb => cb(lang));
   },
