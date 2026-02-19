@@ -1,6 +1,7 @@
 ﻿/**
  * Rei Automator - Main Process
  * Electron メインプロセス
+ * i18n 対応版
  */
 
 import { app, BrowserWindow, ipcMain, globalShortcut, Menu, shell } from 'electron';
@@ -10,6 +11,8 @@ import { FileManager } from './file-manager';
 import { ScreenCapture } from './screen-capture';
 import { convertJapaneseToRei, convertWithClaudeAPI } from '../lib/core/converter';
 import { ImageMatcher } from '../lib/auto/image-matcher';
+// ── i18n ──
+import i18n, { t } from '../i18n';
 
 let mainWindow: BrowserWindow | null = null;
 let executor: ReiExecutor | null = null;
@@ -26,7 +29,7 @@ function createMainWindow(): void {
     height: 700,
     minWidth: 800,
     minHeight: 600,
-    title: 'Rei Automator v0.3',
+    title: `Rei Automator v0.4`,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -72,7 +75,7 @@ function setupIpcHandlers(): void {
       return { success: false, error: 'Executor not initialized' };
     }
     if (executor.isRunning()) {
-      return { success: false, error: '既に実行中です' };
+      return { success: false, error: t('error.executionFailed', { message: 'Already running' }) };
     }
 
     // 非同期実行（UIをブロックしない）
@@ -167,47 +170,36 @@ function setupIpcHandlers(): void {
   });
 
   // ========== Phase 3: 画面キャプチャ ==========
-
-  // 画面キャプチャ（ウィンドウを一時非表示にしてキャプチャ）
   ipcMain.handle('capture-screen', async () => {
     if (!screenCapture || !mainWindow) {
       return { success: false, error: 'ScreenCapture not initialized' };
     }
-
-    // ウィンドウを一時的に非表示
     mainWindow.hide();
     await new Promise((r) => setTimeout(r, 300));
-
     const result = await screenCapture.captureAndSave();
-
-    // ウィンドウを再表示
     mainWindow.show();
     mainWindow.focus();
-
     return result;
   });
 
-  // 保存済みキャプチャ一覧
   ipcMain.handle('list-captures', async () => {
     if (!screenCapture) return [];
     return screenCapture.listCaptures();
   });
 
-  // キャプチャ画像を読み込み
   ipcMain.handle('load-capture', async (_event, filename: string) => {
     if (!screenCapture) return { success: false };
     return screenCapture.loadCapture(filename);
   });
 
   // ── Phase 4: テンプレート管理 IPC ─────────────────────
-
   ipcMain.handle('template:create', async (_event, args: {
     sourcePath: string;
     region: { x: number; y: number; width: number; height: number };
     name: string;
   }) => {
     try {
-      if (!imageMatcher) return { success: false, error: '未初期化' };
+      if (!imageMatcher) return { success: false, error: t('error.executionFailed', { message: 'Not initialized' }) };
       const info = await imageMatcher.createTemplate(args.sourcePath, args.region, args.name);
       return { success: true, template: info };
     } catch (error: any) {
@@ -221,9 +213,8 @@ function setupIpcHandlers(): void {
     name: string;
   }) => {
     try {
-      if (!imageMatcher) return { success: false, error: '未初期化' };
-      const buffer = Buffer.from(args.base64, 'base64');
-      const info = await imageMatcher.createTemplateFromBuffer(buffer, args.region, args.name);
+      if (!imageMatcher) return { success: false, error: 'Not initialized' };
+      const info = await imageMatcher.createTemplateFromBuffer(Buffer.from(args.base64, "base64"), args.region, args.name);
       return { success: true, template: info };
     } catch (error: any) {
       return { success: false, error: error.message };
@@ -232,18 +223,18 @@ function setupIpcHandlers(): void {
 
   ipcMain.handle('template:list', async () => {
     try {
-      if (!imageMatcher) return { success: false, error: '未初期化', templates: [] };
+      if (!imageMatcher) return { success: false, error: 'Not initialized' };
       const templates = await imageMatcher.listTemplates();
       return { success: true, templates };
     } catch (error: any) {
-      return { success: false, error: error.message, templates: [] };
+      return { success: false, error: error.message };
     }
   });
 
   ipcMain.handle('template:delete', async (_event, name: string) => {
     try {
-      if (!imageMatcher) return { success: false, error: '未初期化' };
-      const deleted = imageMatcher.deleteTemplate(name);
+      if (!imageMatcher) return { success: false, error: 'Not initialized' };
+      const deleted = await imageMatcher.deleteTemplate(name);
       return { success: true, deleted };
     } catch (error: any) {
       return { success: false, error: error.message };
@@ -256,7 +247,7 @@ function setupIpcHandlers(): void {
     threshold?: number;
   }) => {
     try {
-      if (!imageMatcher) return { success: false, error: '未初期化' };
+      if (!imageMatcher) return { success: false, error: 'Not initialized' };
       const result = await imageMatcher.findTemplate(
         args.screenshotPath, args.templateName, { threshold: args.threshold }
       );
@@ -272,17 +263,159 @@ function setupIpcHandlers(): void {
       const templatesDir = path.join(app.getAppPath(), '..', 'templates');
       const safeName = name.endsWith('.png') ? name : `${name}.png`;
       const filePath = path.join(templatesDir, safeName);
-      if (!fs.existsSync(filePath)) return { success: false, error: 'テンプレートが見つかりません' };
+      if (!fs.existsSync(filePath)) return { success: false, error: t('error.fileNotFound', { path: safeName }) };
       const buffer = fs.readFileSync(filePath);
       return { success: true, base64: buffer.toString('base64'), name: safeName };
     } catch (error: any) {
       return { success: false, error: error.message };
     }
   });
+
+  // ========== i18n IPC ハンドラー ==========
+  ipcMain.on('i18n-translate', (event, key: string, params?: any) => {
+    event.returnValue = t(key, params);
+  });
+  ipcMain.on('i18n-get-language', (event) => {
+    event.returnValue = i18n.getLanguage();
+  });
+  ipcMain.on('i18n-set-language', (_event, lang: string) => {
+    i18n.setLanguage(lang);
+    // メニューを再構築
+    setupApplicationMenu();
+    // レンダラーに言語変更を通知
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('i18n-language-changed', lang);
+    }
+  });
+  ipcMain.on('i18n-get-languages', (event) => {
+    event.returnValue = i18n.getSupportedLanguages();
+  });
+  // 全翻訳データを一括送信（renderer初期化用）
+  ipcMain.handle('i18n-get-all-translations', async () => {
+    const lang = i18n.getLanguage();
+    const fs = require('fs');
+    const localesDir = path.join(process.resourcesPath || path.join(__dirname, '..', '..'), 'locales');
+    let translations: Record<string, string> = {};
+    try {
+      const filePath = path.join(localesDir, `${lang}.json`);
+      if (fs.existsSync(filePath)) {
+        translations = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+      }
+    } catch (e) {
+      console.warn('[i18n] Failed to load translations for renderer:', e);
+    }
+    return { lang, translations };
+  });
+}
+
+// ── i18n対応 日本語メニュー定義 ──
+function setupApplicationMenu(): void {
+  const template: Electron.MenuItemConstructorOptions[] = [
+    {
+      label: t('menu.file'),
+      submenu: [
+        { label: t('menu.file.new'), accelerator: 'CmdOrCtrl+N', click: () => mainWindow?.webContents.send('menu-action', 'new-script') },
+        { label: t('menu.file.open'), accelerator: 'CmdOrCtrl+O', click: () => mainWindow?.webContents.send('menu-action', 'open-script') },
+        { type: 'separator' },
+        { label: t('menu.file.save'), accelerator: 'CmdOrCtrl+S', click: () => mainWindow?.webContents.send('menu-action', 'save-script') },
+        { label: t('menu.file.saveAs'), accelerator: 'CmdOrCtrl+Shift+S', click: () => mainWindow?.webContents.send('menu-action', 'save-as-script') },
+        { type: 'separator' },
+        { label: t('menu.file.import'), click: () => mainWindow?.webContents.send('menu-action', 'import-script') },
+        { label: t('menu.file.export'), click: () => mainWindow?.webContents.send('menu-action', 'export-script') },
+        { type: 'separator' },
+        { label: t('menu.file.exit'), accelerator: 'Alt+F4', role: 'quit' }
+      ]
+    },
+    {
+      label: t('menu.edit'),
+      submenu: [
+        { label: t('menu.edit.undo'), accelerator: 'CmdOrCtrl+Z', role: 'undo' },
+        { label: t('menu.edit.redo'), accelerator: 'CmdOrCtrl+Y', role: 'redo' },
+        { type: 'separator' },
+        { label: t('menu.edit.cut'), accelerator: 'CmdOrCtrl+X', role: 'cut' },
+        { label: t('menu.edit.copy'), accelerator: 'CmdOrCtrl+C', role: 'copy' },
+        { label: t('menu.edit.paste'), accelerator: 'CmdOrCtrl+V', role: 'paste' },
+        { type: 'separator' },
+        { label: t('menu.edit.selectAll'), accelerator: 'CmdOrCtrl+A', role: 'selectAll' }
+      ]
+    },
+    {
+      label: t('menu.view'),
+      submenu: [
+        { label: t('menu.view.fullscreen'), accelerator: 'F11', role: 'togglefullscreen' },
+        { type: 'separator' },
+        { label: t('menu.help.docs'), accelerator: 'F12', role: 'toggleDevTools' }
+      ]
+    },
+    {
+      label: t('menu.tools'),
+      submenu: [
+        { label: t('menu.tools.settings'), click: () => mainWindow?.webContents.send('menu-action', 'open-settings') },
+        { label: t('menu.tools.uwscConvert'), click: () => mainWindow?.webContents.send('menu-action', 'uwsc-convert') },
+        { type: 'separator' },
+        {
+          label: t('menu.tools.language'),
+          submenu: i18n.getSupportedLanguages().map(lang => ({
+            label: `${lang.nativeName} (${lang.name})`,
+            type: 'radio' as const,
+            checked: i18n.getLanguage() === lang.code,
+            click: () => {
+              i18n.setLanguage(lang.code);
+              setupApplicationMenu();
+              if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('i18n-language-changed', lang.code);
+              }
+            }
+          }))
+        }
+      ]
+    },
+    {
+      label: t('menu.window'),
+      submenu: [
+        { label: t('menu.window.minimize'), role: 'minimize' },
+        { label: t('menu.window.close'), role: 'close' }
+      ]
+    },
+    {
+      label: t('menu.help'),
+      submenu: [
+        { label: t('menu.help.about'), click: () => {
+          const { dialog } = require('electron');
+          dialog.showMessageBox(mainWindow!, {
+            type: 'info',
+            title: t('about.title'),
+            message: t('about.version', { version: '0.4.0' }),
+            detail: `${t('about.description')}\n\n${t('about.author')}\n${t('about.license')}`,
+            buttons: ['OK']
+          });
+        }},
+        { label: t('menu.help.checkUpdate'), click: () => { /* TODO */ } },
+        { type: 'separator' },
+        { label: t('menu.help.github'), click: () => shell.openExternal('https://github.com/fc0web/rei-automator') },
+        { label: 'Rei Language (npm)', click: () => shell.openExternal('https://www.npmjs.com/package/rei-lang') }
+      ]
+    }
+  ];
+  const menu = Menu.buildFromTemplate(template);
+  Menu.setApplicationMenu(menu);
 }
 
 // アプリ起動
-﻿  // ========== Phase 6 ==========
+app.whenReady().then(() => {
+  // ── i18n 初期化 ──
+  i18n.init();
+
+  const useStub = process.argv.includes('--stub');
+  executor = new ReiExecutor(useStub);
+  fileManager = new FileManager();
+  screenCapture = new ScreenCapture();
+
+  // Phase 4: ImageMatcher 初期化
+  const templatesDir = path.join(app.getAppPath(), '..', 'templates');
+  imageMatcher = new ImageMatcher(templatesDir);
+
+  // ========== Phase 6 ==========
   const { ScriptManager } = require('../lib/core/script-manager');
   const { Logger } = require('../lib/core/logger');
   const { ErrorHandler } = require('../lib/core/error-handler');
@@ -318,12 +451,11 @@ function setupIpcHandlers(): void {
   const { Scheduler } = require('../lib/core/scheduler');
   const scheduler = new Scheduler();
 
-  // スケジュール実行コールバック: scriptId からスクリプトを読み込んで実行
   scheduler.setExecutor(async (scriptId: string, scheduleName: string) => {
     const script = scriptManager.loadScript(scriptId);
-    if (!script) return { success: false, error: 'スクリプトが見つかりません' };
-    if (!executor) return { success: false, error: 'Executor未初期化' };
-    if (executor.isRunning()) return { success: false, error: '別のスクリプトが実行中です' };
+    if (!script) return { success: false, error: t('error.fileNotFound', { path: scriptId }) };
+    if (!executor) return { success: false, error: 'Executor not initialized' };
+    if (executor.isRunning()) return { success: false, error: t('error.executionFailed', { message: 'Another script is running' }) };
 
     console.log(`[Scheduler] Running "${scheduleName}" → script "${script.name}"`);
     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -339,107 +471,26 @@ function setupIpcHandlers(): void {
     return { success: result.success, error: result.error };
   });
 
-  // スケジュール通知コールバック
   scheduler.setNotifier((schedule: any, event: string, detail?: string) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('schedule:event', { scheduleId: schedule.id, name: schedule.name, event, detail });
     }
   });
 
-  // スケジューラー IPC
   ipcMain.handle('schedule:list', async () => scheduler.list());
   ipcMain.handle('schedule:create', async (_e, params) => scheduler.create(params));
   ipcMain.handle('schedule:update', async (_e, id, params) => scheduler.update(id, params));
   ipcMain.handle('schedule:delete', async (_e, id) => scheduler.delete(id));
   ipcMain.handle('schedule:toggle', async (_e, id) => scheduler.toggle(id));
 
-
-// ── 日本語メニュー定義 ──
-function setupApplicationMenu(): void {
-  const template: Electron.MenuItemConstructorOptions[] = [
-    {
-      label: 'ファイル',
-      submenu: [
-        { label: '新規スクリプト', accelerator: 'CmdOrCtrl+N', click: () => mainWindow?.webContents.send('menu-action', 'new-script') },
-        { label: '開く...', accelerator: 'CmdOrCtrl+O', click: () => mainWindow?.webContents.send('menu-action', 'open-script') },
-        { type: 'separator' },
-        { label: '保存', accelerator: 'CmdOrCtrl+S', click: () => mainWindow?.webContents.send('menu-action', 'save-script') },
-        { label: '名前を付けて保存...', accelerator: 'CmdOrCtrl+Shift+S', click: () => mainWindow?.webContents.send('menu-action', 'save-as-script') },
-        { type: 'separator' },
-        { label: '終了', accelerator: 'Alt+F4', role: 'quit' }
-      ]
-    },
-    {
-      label: '編集',
-      submenu: [
-        { label: '元に戻す', accelerator: 'CmdOrCtrl+Z', role: 'undo' },
-        { label: 'やり直し', accelerator: 'CmdOrCtrl+Y', role: 'redo' },
-        { type: 'separator' },
-        { label: '切り取り', accelerator: 'CmdOrCtrl+X', role: 'cut' },
-        { label: 'コピー', accelerator: 'CmdOrCtrl+C', role: 'copy' },
-        { label: '貼り付け', accelerator: 'CmdOrCtrl+V', role: 'paste' },
-        { type: 'separator' },
-        { label: 'すべて選択', accelerator: 'CmdOrCtrl+A', role: 'selectAll' }
-      ]
-    },
-    {
-      label: '表示',
-      submenu: [
-        { label: '拡大', accelerator: 'CmdOrCtrl+Plus', role: 'zoomIn' },
-        { label: '縮小', accelerator: 'CmdOrCtrl+-', role: 'zoomOut' },
-        { label: 'リセット', accelerator: 'CmdOrCtrl+0', role: 'resetZoom' },
-        { type: 'separator' },
-        { label: '全画面表示', accelerator: 'F11', role: 'togglefullscreen' },
-        { type: 'separator' },
-        { label: '開発者ツール', accelerator: 'F12', role: 'toggleDevTools' }
-      ]
-    },
-    {
-      label: 'ウィンドウ',
-      submenu: [
-        { label: '最小化', role: 'minimize' },
-        { label: '閉じる', role: 'close' }
-      ]
-    },
-    {
-      label: 'ヘルプ',
-      submenu: [
-        { label: 'Rei Automator について', click: () => {
-          const { dialog } = require('electron');
-          dialog.showMessageBox(mainWindow!, {
-            type: 'info',
-            title: 'Rei Automator について',
-            message: 'Rei Automator v0.4.0',
-            detail: '軽量PC自動操作ツール\nPowered by Rei Language\n\nCopyright © 2024-2026 Nobuki Fujimoto',
-            buttons: ['OK']
-          });
-        }},
-        { type: 'separator' },
-        { label: 'GitHubリポジトリ', click: () => shell.openExternal('https://github.com/fc0web/rei-automator') },
-        { label: 'Rei言語について', click: () => shell.openExternal('https://www.npmjs.com/package/rei-lang') }
-      ]
-    }
-  ];
-  const menu = Menu.buildFromTemplate(template);
-  Menu.setApplicationMenu(menu);
-}
-app.whenReady().then(() => {
-  const useStub = process.argv.includes('--stub');
-  executor = new ReiExecutor(useStub);
-  fileManager = new FileManager();
-  screenCapture = new ScreenCapture();
-
-  // Phase 4: ImageMatcher 初期化
-  const templatesDir = path.join(app.getAppPath(), '..', 'templates');
-  imageMatcher = new ImageMatcher(templatesDir);
   // runtime に注入（executor経由）
   if (executor && screenCapture) {
     executor.setImageMatcher(imageMatcher);
-  executor.setLogger(logger);
-  executor.setErrorHandler(errorHandler);
+    executor.setLogger(logger);
+    executor.setErrorHandler(errorHandler);
     executor.setCaptureFunc(async () => {
       const r = await screenCapture!.captureAndSave();
-      if (!r.success || !r.savedPath) throw new Error('キャプチャ失敗');
+      if (!r.success || !r.savedPath) throw new Error(t('error.captureError', { message: 'Failed' }));
       return r.savedPath;
     });
   }
@@ -449,6 +500,11 @@ app.whenReady().then(() => {
   createMainWindow();
   registerGlobalShortcuts();
   scheduler.startAll();
+
+  // 言語変更時にメニューを自動再構築
+  i18n.onLanguageChange(() => {
+    setupApplicationMenu();
+  });
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -464,6 +520,5 @@ app.on('window-all-closed', () => {
 
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
-  scheduler.stopAll();
   if (executor && executor.isRunning()) executor.stop();
 });

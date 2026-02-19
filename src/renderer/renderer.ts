@@ -1,5 +1,6 @@
-﻿/**
- * Rei Automator Phase 6 - renderer.ts
+/**
+ * Rei Automator Phase 7 - renderer.ts
+ * i18n 対応版
  * A) スクリプト管理UI  B) エラーハンドリング  C) デバッグ/ログ  D) 変数・パラメータ
  */
 
@@ -41,6 +42,14 @@ interface ReiAPI {
 
 interface Window {
   reiAPI: ReiAPI;
+  i18nAPI: {
+    t: (key: string, params?: Record<string, string | number>) => string;
+    getLanguage: () => string;
+    setLanguage: (lang: string) => void;
+    getSupportedLanguages: () => Array<{ code: string; name: string; nativeName: string; direction: string }>;
+    getAllTranslations: () => Promise<{ lang: string; translations: Record<string, string> }>;
+    onLanguageChanged: (callback: (lang: string) => void) => void;
+  };
 }
 
 interface SavedScript { id: string; name: string; content: string; updatedAt: string; tags: string[]; }
@@ -68,11 +77,57 @@ interface ScheduleCreateParams {
 interface ScheduleEvent { scheduleId: string; name: string; event: string; detail?: string; }
 
 // ============================================================
+// i18n ヘルパー
+// ============================================================
+/**
+ * 翻訳関数のショートカット
+ */
+function t(key: string, params?: Record<string, string | number>): string {
+  if (window.i18nAPI && window.i18nAPI.t) {
+    return window.i18nAPI.t(key, params);
+  }
+  return key; // フォールバック
+}
+
+/**
+ * data-i18n / data-i18n-placeholder / data-i18n-title 属性を持つ要素を全て翻訳適用
+ */
+function applyI18nToDOM(): void {
+  // textContent
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.getAttribute('data-i18n');
+    if (key) el.textContent = t(key);
+  });
+  // placeholder
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+    const key = el.getAttribute('data-i18n-placeholder');
+    if (key) (el as HTMLInputElement).placeholder = t(key);
+  });
+  // title (tooltip)
+  document.querySelectorAll('[data-i18n-title]').forEach(el => {
+    const key = el.getAttribute('data-i18n-title');
+    if (key) (el as HTMLElement).title = t(key);
+  });
+  // data-i18n-default (現在のスクリプト名の初期値)
+  document.querySelectorAll('[data-i18n-default]').forEach(el => {
+    if (!el.textContent || el.textContent.trim() === '') {
+      const key = el.getAttribute('data-i18n-default');
+      if (key === 'untitled-script') el.textContent = t('untitled');
+    }
+  });
+  // select > option with data-i18n
+  document.querySelectorAll('option[data-i18n]').forEach(el => {
+    const key = el.getAttribute('data-i18n');
+    if (key) el.textContent = t(key);
+  });
+}
+
+// ============================================================
 // 状態管理
 // ============================================================
 const state = {
   currentScriptId: null as string | null,
-  currentScriptName: '無題のスクリプト',
+  currentScriptName: '',
   isDirty: false,
   isRunning: false,
   isStepPaused: false,
@@ -180,10 +235,10 @@ function showToast(message: string, type: 'success' | 'error' | 'warn' = 'succes
 
 function formatRelativeTime(isoString: string): string {
   const diff = Date.now() - new Date(isoString).getTime();
-  if (diff < 60_000) return 'たった今';
-  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}分前`;
-  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}時間前`;
-  return new Date(isoString).toLocaleDateString('ja-JP');
+  if (diff < 60_000) return t('time.justNow');
+  if (diff < 3_600_000) return t('time.minutesAgo', { n: Math.floor(diff / 60_000) });
+  if (diff < 86_400_000) return t('time.hoursAgo', { n: Math.floor(diff / 3_600_000) });
+  return new Date(isoString).toLocaleDateString();
 }
 
 function formatDuration(ms: number): string {
@@ -212,7 +267,7 @@ function renderScriptList(scripts: ScriptMeta[]): void {
   );
 
   if (filtered.length === 0) {
-    el.scriptList.innerHTML = '<div class="empty-state">スクリプトがありません</div>';
+    el.scriptList.innerHTML = `<div class="empty-state">${escapeHtml(t('sidebar.noScripts'))}</div>`;
     return;
   }
 
@@ -221,10 +276,10 @@ function renderScriptList(scripts: ScriptMeta[]): void {
          data-id="${s.id}">
       <div class="script-item-name">${escapeHtml(s.name)}</div>
       <div class="script-item-meta">${formatRelativeTime(s.updatedAt)}</div>
-      ${s.tags.length > 0 ? `<div class="script-item-tags">${s.tags.map(t => `<span class="tag">${escapeHtml(t)}</span>`).join('')}</div>` : ''}
+      ${s.tags.length > 0 ? `<div class="script-item-tags">${s.tags.map(tag => `<span class="tag">${escapeHtml(tag)}</span>`).join('')}</div>` : ''}
       <div class="script-item-actions">
-        <button class="load-btn" data-id="${s.id}">📂 開く</button>
-        <button class="del-btn" data-id="${s.id}">🗑 削除</button>
+        <button class="load-btn" data-id="${s.id}">${escapeHtml(t('script.open'))}</button>
+        <button class="del-btn" data-id="${s.id}">${escapeHtml(t('script.delete'))}</button>
       </div>
     </div>
   `).join('');
@@ -241,15 +296,15 @@ function renderScriptList(scripts: ScriptMeta[]): void {
     btn.addEventListener('click', async (e) => {
       e.stopPropagation();
       const id = (btn as HTMLElement).dataset.id!;
-      if (confirm('このスクリプトを削除しますか？')) {
+      if (confirm(t('confirm.deleteScript'))) {
         await window.reiAPI.scriptDelete(id);
         if (state.currentScriptId === id) {
           state.currentScriptId = null;
           el.scriptEditor.value = '';
-          updateScriptNameDisplay('無題のスクリプト');
+          updateScriptNameDisplay(t('untitled'));
         }
         await loadScriptList();
-        showToast('削除しました');
+        showToast(t('toast.deleted'));
       }
     });
   });
@@ -257,16 +312,15 @@ function renderScriptList(scripts: ScriptMeta[]): void {
 
 async function loadScript(id: string): Promise<void> {
   const script = await window.reiAPI.scriptLoad(id);
-  if (!script) { showToast('スクリプトの読み込みに失敗しました', 'error'); return; }
+  if (!script) { showToast(t('toast.loadFailed'), 'error'); return; }
   state.currentScriptId = script.id;
   el.scriptEditor.value = script.content;
   updateScriptNameDisplay(script.name);
   setDirty(false);
   renderScriptList(state.scripts);
 
-  // 実行履歴も更新
   await loadHistory();
-  showToast(`「${script.name}」を開きました`);
+  showToast(t('toast.opened', { name: script.name }));
 }
 
 function updateScriptNameDisplay(name: string): void {
@@ -275,14 +329,14 @@ function updateScriptNameDisplay(name: string): void {
 }
 
 function openSaveModal(): void {
-  el.saveNameInput.value = state.currentScriptName === '無題のスクリプト' ? '' : state.currentScriptName;
+  el.saveNameInput.value = state.currentScriptName === t('untitled') ? '' : state.currentScriptName;
   el.saveTagsInput.value = '';
   el.modalSave.hidden = false;
   el.saveNameInput.focus();
 }
 
 async function saveCurrentScript(): Promise<void> {
-  const name = el.saveNameInput.value.trim() || '無題のスクリプト';
+  const name = el.saveNameInput.value.trim() || t('untitled');
   const tags = el.saveTagsInput.value.split(',').map(t => t.trim()).filter(Boolean);
   const content = el.scriptEditor.value;
 
@@ -292,7 +346,7 @@ async function saveCurrentScript(): Promise<void> {
   setDirty(false);
   el.modalSave.hidden = true;
   await loadScriptList();
-  showToast(`「${name}」を保存しました`);
+  showToast(t('toast.saved', { name }));
 }
 
 // ============================================================
@@ -302,9 +356,8 @@ async function scanAndShowParams(): Promise<boolean> {
   const content = el.scriptEditor.value;
   state.params = await window.reiAPI.scriptScanParams(content);
 
-  if (state.params.length === 0) return true; // パラメータなし、そのまま実行
+  if (state.params.length === 0) return true;
 
-  // パラメータ入力フォーム生成
   el.paramsInputs.innerHTML = state.params.map(p => `
     <div class="param-row">
       <label>
@@ -322,7 +375,7 @@ async function scanAndShowParams(): Promise<boolean> {
   `).join('');
 
   el.paramsPanel.hidden = false;
-  return false; // 実行待ち（パラメータ確認後に実行）
+  return false;
 }
 
 function getParamValues(): Record<string, string | number | boolean> {
@@ -341,7 +394,7 @@ function getParamValues(): Record<string, string | number | boolean> {
 function updateVarsPanel(vars: Record<string, unknown>): void {
   state.variables = vars;
   if (Object.keys(vars).length === 0) {
-    el.varsBody.innerHTML = '<tr class="empty-row"><td colspan="4">変数はありません</td></tr>';
+    el.varsBody.innerHTML = `<tr class="empty-row"><td colspan="4">${escapeHtml(t('panel.vars.empty'))}</td></tr>`;
     return;
   }
   el.varsBody.innerHTML = Object.entries(vars).map(([name, value]) => `
@@ -349,7 +402,7 @@ function updateVarsPanel(vars: Record<string, unknown>): void {
       <td class="var-name">$${escapeHtml(name)}</td>
       <td class="var-value">${escapeHtml(String(value))}</td>
       <td class="var-type">${typeof value}</td>
-      <td><button class="small-btn" onclick="copyToClipboard('$${name}')">コピー</button></td>
+      <td><button class="small-btn" onclick="copyToClipboard('$${name}')">${escapeHtml(t('script.copy'))}</button></td>
     </tr>
   `).join('');
 }
@@ -360,7 +413,7 @@ function updateVarsPanel(vars: Record<string, unknown>): void {
 function updateErrorsPanel(errors: ErrorDetail[]): void {
   state.errors = errors;
   if (errors.length === 0) {
-    el.errorsContainer.innerHTML = '<div class="log-empty">エラーはありません</div>';
+    el.errorsContainer.innerHTML = `<div class="log-empty">${escapeHtml(t('panel.errors.empty'))}</div>`;
     return;
   }
   el.errorsContainer.innerHTML = errors.map(e => `
@@ -370,7 +423,7 @@ function updateErrorsPanel(errors: ErrorDetail[]): void {
         <code class="error-cmd">${escapeHtml(e.command)}</code>
       </div>
       <div class="error-msg">❌ ${escapeHtml(e.message)}</div>
-      ${e.retryCount ? `<div class="error-hint">🔄 ${e.retryCount}回リトライ済み</div>` : ''}
+      ${e.retryCount ? `<div class="error-hint">${escapeHtml(t('retry.count', { count: e.retryCount }))}</div>` : ''}
     </div>
   `).join('');
 }
@@ -381,11 +434,10 @@ function updateErrorsPanel(errors: ErrorDetail[]): void {
 function appendLogEntry(entry: LogEntry): void {
   state.logs.push(entry);
 
-  // 「実行ログがありません」プレースホルダーを削除
   const empty = el.logContainer.querySelector('.log-empty');
   if (empty) empty.remove();
 
-  const time = new Date(entry.timestamp).toLocaleTimeString('ja-JP', { hour12: false });
+  const time = new Date(entry.timestamp).toLocaleTimeString(undefined, { hour12: false });
   const lineNum = entry.lineNumber !== undefined ? `<span class="log-line-num">#${entry.lineNumber}</span>` : '';
   const vars = entry.variables && Object.keys(entry.variables).length > 0
     ? `<span class="log-vars">{${Object.entries(entry.variables).map(([k,v]) => `${k}=${v}`).join(', ')}}</span>`
@@ -402,7 +454,6 @@ function appendLogEntry(entry: LogEntry): void {
   `;
   el.logContainer.appendChild(div);
 
-  // 自動スクロール（アクティブ時のみ）
   if (state.activePanel === 'log') {
     el.logContainer.scrollTop = el.logContainer.scrollHeight;
   }
@@ -410,19 +461,17 @@ function appendLogEntry(entry: LogEntry): void {
 
 function clearLogs(): void {
   state.logs = [];
-  el.logContainer.innerHTML = '<div class="log-empty">実行するとログが表示されます</div>';
+  el.logContainer.innerHTML = `<div class="log-empty">${escapeHtml(t('log.empty'))}</div>`;
 }
 
 async function exportLogs(): Promise<void> {
   const text = await window.reiAPI.logExportText();
   const destPath = await window.reiAPI.dialogSaveFile('execution-log.txt');
   if (destPath) {
-    // Electronのfsモジュール経由で保存
-    showToast('ログをエクスポートしました');
+    showToast(t('toast.logExported'));
   } else {
-    // クリップボードにコピー
     await navigator.clipboard.writeText(text);
-    showToast('ログをクリップボードにコピーしました');
+    showToast(t('toast.logCopied'));
   }
 }
 
@@ -433,16 +482,11 @@ async function runScript(paramValues?: Record<string, string | number | boolean>
   if (state.isRunning) return;
 
   const content = el.scriptEditor.value.trim();
-  if (!content) { showToast('スクリプトが空です', 'warn'); return; }
+  if (!content) { showToast(t('toast.scriptEmpty'), 'warn'); return; }
 
-  // エラーポリシー設定
   await window.reiAPI.errorSetPolicy(el.errorPolicy.value);
   await window.reiAPI.errorClear();
-
-  // ステップモード設定
   await window.reiAPI.logSetStepMode(el.stepModeToggle.checked);
-
-  // ログセッション開始
   await window.reiAPI.logStartSession(state.currentScriptName);
   clearLogs();
 
@@ -452,7 +496,6 @@ async function runScript(paramValues?: Record<string, string | number | boolean>
   const startTime = Date.now();
 
   try {
-    // パラメータ値をスクリプトに先頭注入
     let scriptToRun = content;
     if (paramValues && Object.keys(paramValues).length > 0) {
       const paramLines = Object.entries(paramValues)
@@ -476,9 +519,9 @@ async function runScript(paramValues?: Record<string, string | number | boolean>
       const errors = await window.reiAPI.errorGetErrors();
       updateErrorsPanel(errors);
       switchPanel('errors');
-      showToast(`実行失敗: ${result.error}`, 'error');
+      showToast(t('toast.execFailed', { message: result.error }), 'error');
     } else {
-      showToast(`実行完了 (${formatDuration(duration)})`);
+      showToast(t('toast.execDone', { duration: formatDuration(duration) }));
     }
 
     await loadHistory();
@@ -489,7 +532,7 @@ async function runScript(paramValues?: Record<string, string | number | boolean>
     if (state.currentScriptId) {
       await window.reiAPI.scriptRecordExecution(state.currentScriptId, duration, false, String(e));
     }
-    showToast(`エラー: ${String(e)}`, 'error');
+    showToast(t('toast.execFailed', { message: String(e) }), 'error');
   } finally {
     state.isRunning = false;
     state.isStepPaused = false;
@@ -511,7 +554,6 @@ async function handleRunClick(): Promise<void> {
   if (ready) {
     await runScript();
   }
-  // パラメータがある場合はボタンクリック待ち（params-run）
 }
 
 // ============================================================
@@ -524,7 +566,7 @@ async function loadHistory(): Promise<void> {
 
 function renderHistory(history: ScriptHistory[]): void {
   if (history.length === 0) {
-    el.historyContainer.innerHTML = '<div class="log-empty">履歴はありません</div>';
+    el.historyContainer.innerHTML = `<div class="log-empty">${escapeHtml(t('panel.history.empty'))}</div>`;
     return;
   }
   el.historyContainer.innerHTML = history.slice(0, 30).map(h => {
@@ -533,7 +575,7 @@ function renderHistory(history: ScriptHistory[]): void {
       <div class="history-row">
         <span class="history-status">${h.success ? '✅' : '❌'}</span>
         <span class="history-script">${scriptMeta ? escapeHtml(scriptMeta.name) : h.scriptId}</span>
-        <span class="history-time">${new Date(h.executedAt).toLocaleString('ja-JP')}</span>
+        <span class="history-time">${new Date(h.executedAt).toLocaleString()}</span>
         <span class="history-duration">${formatDuration(h.duration)}</span>
       </div>
     `;
@@ -568,13 +610,13 @@ function escapeHtml(str: string): string {
 }
 
 (window as unknown as Record<string, unknown>).copyToClipboard = (text: string) => {
-  navigator.clipboard.writeText(text).then(() => showToast(`クリップボードにコピー: ${text}`));
+  navigator.clipboard.writeText(text).then(() => showToast(t('toast.clipboard', { text })));
 };
 
 // ============================================================
 // Phase 7: スケジュール管理
 // ============================================================
-const DAY_NAMES = ['日', '月', '火', '水', '木', '金', '土'];
+const DAY_KEYS = ['day.sun', 'day.mon', 'day.tue', 'day.wed', 'day.thu', 'day.fri', 'day.sat'];
 
 async function loadScheduleList(): Promise<void> {
   state.schedules = await window.reiAPI.scheduleList();
@@ -583,16 +625,21 @@ async function loadScheduleList(): Promise<void> {
 
 function renderScheduleList(): void {
   if (state.schedules.length === 0) {
-    el.scheduleList.innerHTML = '<div class="log-empty">スケジュールはありません</div>';
+    el.scheduleList.innerHTML = `<div class="log-empty">${escapeHtml(t('panel.schedule.empty'))}</div>`;
     return;
   }
 
   el.scheduleList.innerHTML = state.schedules.map(s => {
-    const typeLabel = { once: '1回のみ', interval: `${s.intervalMinutes}分間隔`, daily: `毎日 ${s.dailyTime}`, weekly: `毎週${DAY_NAMES[s.weeklyDay ?? 0]} ${s.weeklyTime}` }[s.type] || s.type;
+    const typeLabel = {
+      once: t('schedule.typeOnce'),
+      interval: t('schedule.typeInterval', { n: s.intervalMinutes || 30 }),
+      daily: t('schedule.typeDaily', { time: s.dailyTime || '' }),
+      weekly: t('schedule.typeWeekly', { day: t(DAY_KEYS[s.weeklyDay ?? 0]), time: s.weeklyTime || '' }),
+    }[s.type] || s.type;
     const statusIcon = s.enabled ? '🟢' : '⏸️';
-    const lastRunText = s.lastRun ? new Date(s.lastRun).toLocaleString('ja-JP') : '未実行';
+    const lastRunText = s.lastRun ? new Date(s.lastRun).toLocaleString() : t('schedule.notRun');
     const lastResultIcon = s.lastResult === 'success' ? '✅' : s.lastResult === 'error' ? '❌' : '';
-    const nextRunText = s.nextRun ? new Date(s.nextRun).toLocaleString('ja-JP') : '-';
+    const nextRunText = s.nextRun ? new Date(s.nextRun).toLocaleString() : '-';
 
     return `
       <div class="schedule-row ${s.enabled ? '' : 'disabled'}">
@@ -601,18 +648,17 @@ function renderScheduleList(): void {
           <div class="schedule-info">
             <strong>${escapeHtml(s.name)}</strong>
             <span class="schedule-meta">📝 ${escapeHtml(s.scriptName)} | ${typeLabel}</span>
-            <span class="schedule-meta">前回: ${lastResultIcon} ${lastRunText} | 次回: ${nextRunText}</span>
+            <span class="schedule-meta">${t('schedule.lastRun')} ${lastResultIcon} ${lastRunText} | ${t('schedule.nextRun')} ${nextRunText}</span>
           </div>
         </div>
         <div class="schedule-actions">
-          <button class="small-btn sched-toggle-btn" data-id="${s.id}" title="${s.enabled ? '無効化' : '有効化'}">${s.enabled ? '⏸' : '▶'}</button>
-          <button class="small-btn sched-delete-btn" data-id="${s.id}" title="削除">🗑</button>
+          <button class="small-btn sched-toggle-btn" data-id="${s.id}" title="${s.enabled ? t('schedule.disable') : t('schedule.enable')}">${s.enabled ? '⏸' : '▶'}</button>
+          <button class="small-btn sched-delete-btn" data-id="${s.id}" title="${t('script.delete')}">🗑</button>
         </div>
       </div>
     `;
   }).join('');
 
-  // トグルボタン
   el.scheduleList.querySelectorAll('.sched-toggle-btn').forEach((btn: any) => {
     btn.addEventListener('click', async () => {
       await window.reiAPI.scheduleToggle(btn.dataset.id);
@@ -620,13 +666,12 @@ function renderScheduleList(): void {
     });
   });
 
-  // 削除ボタン
   el.scheduleList.querySelectorAll('.sched-delete-btn').forEach((btn: any) => {
     btn.addEventListener('click', async () => {
-      if (confirm('このスケジュールを削除しますか？')) {
+      if (confirm(t('confirm.deleteSchedule'))) {
         await window.reiAPI.scheduleDelete(btn.dataset.id);
         await loadScheduleList();
-        showToast('スケジュールを削除しました');
+        showToast(t('toast.schedDeleted'));
       }
     });
   });
@@ -634,7 +679,7 @@ function renderScheduleList(): void {
 
 function openScheduleModal(): void {
   el.schedName.value = '';
-  el.schedScript.innerHTML = '<option value="">-- スクリプトを選択 --</option>' +
+  el.schedScript.innerHTML = `<option value="">${escapeHtml(t('schedule.selectScript'))}</option>` +
     state.scripts.map(s => `<option value="${s.id}" data-name="${escapeHtml(s.name)}">${escapeHtml(s.name)}</option>`).join('');
   el.schedType.value = 'once';
   updateScheduleTypeOptions();
@@ -657,14 +702,14 @@ async function createSchedule(): Promise<void> {
   const scriptName = selectedOption?.dataset?.name || selectedOption?.textContent || '';
   const type = el.schedType.value as 'once' | 'interval' | 'daily' | 'weekly';
 
-  if (!name) { showToast('スケジュール名を入力してください', 'warn'); return; }
-  if (!scriptId) { showToast('スクリプトを選択してください', 'warn'); return; }
+  if (!name) { showToast(t('toast.schedInputName'), 'warn'); return; }
+  if (!scriptId) { showToast(t('toast.schedSelectScript'), 'warn'); return; }
 
   const params: ScheduleCreateParams = { name, scriptId, scriptName, type };
 
   switch (type) {
     case 'once':
-      if (!el.schedRunAt.value) { showToast('実行日時を設定してください', 'warn'); return; }
+      if (!el.schedRunAt.value) { showToast(t('toast.schedSetTime'), 'warn'); return; }
       params.runAt = new Date(el.schedRunAt.value).toISOString();
       break;
     case 'interval':
@@ -682,7 +727,7 @@ async function createSchedule(): Promise<void> {
   await window.reiAPI.scheduleCreate(params);
   el.modalSchedule.hidden = true;
   await loadScheduleList();
-  showToast(`スケジュール「${name}」を作成しました`);
+  showToast(t('toast.schedCreated', { name }));
 }
 
 // ============================================================
@@ -692,10 +737,10 @@ function initEventListeners(): void {
 
   // ---- ヘッダー ----
   el.btnNew.addEventListener('click', () => {
-    if (state.isDirty && !confirm('変更を破棄して新規作成しますか？')) return;
+    if (state.isDirty && !confirm(t('confirm.discardChanges'))) return;
     state.currentScriptId = null;
     el.scriptEditor.value = '';
-    updateScriptNameDisplay('無題のスクリプト');
+    updateScriptNameDisplay(t('untitled'));
     setDirty(false);
     clearLogs();
     renderScriptList(state.scripts);
@@ -719,15 +764,15 @@ function initEventListeners(): void {
     if (!path) return;
     const script = await window.reiAPI.scriptImport(path);
     await loadScriptList();
-    showToast(`「${script.name}」をインポートしました`);
+    showToast(t('toast.imported', { name: script.name }));
   });
 
   el.btnExport.addEventListener('click', async () => {
-    if (!state.currentScriptId) { showToast('保存済みのスクリプトを選択してください', 'warn'); return; }
+    if (!state.currentScriptId) { showToast(t('toast.selectSaved'), 'warn'); return; }
     const path = await window.reiAPI.dialogSaveFile(`${state.currentScriptName}.rei`);
     if (path) {
       await window.reiAPI.scriptExport(state.currentScriptId, path);
-      showToast('エクスポート完了');
+      showToast(t('toast.exportDone'));
     }
   });
 
@@ -754,7 +799,7 @@ function initEventListeners(): void {
     el.scriptEditor.value = current ? `${current}\n${code}` : code;
     el.nlpInput.value = '';
     setDirty(true);
-    showToast('変換完了');
+    showToast(t('toast.nlpDone'));
   });
   el.nlpInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') el.btnNlpConvert.click();
@@ -773,7 +818,7 @@ function initEventListeners(): void {
   el.btnRun.addEventListener('click', handleRunClick);
   el.btnStop.addEventListener('click', async () => {
     await window.reiAPI.stop();
-    showToast('停止しました', 'warn');
+    showToast(t('toast.stopped'), 'warn');
   });
 
   // ---- ステップ実行 (C) ----
@@ -835,12 +880,12 @@ function initEventListeners(): void {
   // ---- IPC イベント受信 ----
   window.reiAPI.onScheduleEvent((data: ScheduleEvent) => {
     if (data.event === 'started') {
-      showToast(`⏰ スケジュール「${data.name}」を実行中...`, 'success');
+      showToast(t('toast.schedRunning', { name: data.name }));
     } else if (data.event === 'completed') {
-      showToast(`✅ スケジュール「${data.name}」が完了しました`, 'success');
+      showToast(t('toast.schedCompleted', { name: data.name }));
       if (state.activePanel === 'schedule') loadScheduleList();
     } else if (data.event === 'error') {
-      showToast(`❌ スケジュール「${data.name}」でエラー: ${data.detail}`, 'error');
+      showToast(t('toast.schedError', { name: data.name, detail: data.detail || '' }), 'error');
       if (state.activePanel === 'schedule') loadScheduleList();
     }
   });
@@ -850,14 +895,13 @@ function initEventListeners(): void {
       id: 'sched_' + Date.now(),
       timestamp: new Date().toISOString(),
       level: 'info',
-      message: `⏰ スケジュール「${data.scheduleName}」→ スクリプト「${data.scriptName}」実行開始`,
+      message: t('schedLog.running', { scheduleName: data.scheduleName, scriptName: data.scriptName }),
     });
   });
 
   // ---- IPC イベント受信 ----
   window.reiAPI.onLogEntry((entry: LogEntry) => {
     appendLogEntry(entry);
-    // 変数更新があれば変数パネルを更新
     if (entry.variables) updateVarsPanel(entry.variables);
   });
 
@@ -868,18 +912,33 @@ function initEventListeners(): void {
     el.stepCommandInfo.textContent = entry.command ?? entry.message;
     el.btnStepNext.disabled = false;
     el.btnStepNextFloat.disabled = false;
-    switchPanel('log'); // ログパネルへ自動切替
+    switchPanel('log');
   });
+
+  // ---- i18n: 言語変更時にDOMを再適用 ----
+  if (window.i18nAPI && window.i18nAPI.onLanguageChanged) {
+    window.i18nAPI.onLanguageChanged((_lang: string) => {
+      applyI18nToDOM();
+      // 動的に生成される部分も再レンダリング
+      renderScriptList(state.scripts);
+      if (state.activePanel === 'schedule') renderScheduleList();
+      if (state.errors.length > 0) updateErrorsPanel(state.errors);
+    });
+  }
 }
 
 // ============================================================
 // 初期化
 // ============================================================
 async function init(): Promise<void> {
+  // i18n: DOMの静的テキストを翻訳適用
+  state.currentScriptName = t('untitled');
+  applyI18nToDOM();
+
   initEventListeners();
   await loadScriptList();
   await loadHistory();
-  showToast('Phase 7 起動完了 🚀');
+  showToast(t('toast.startup'));
 }
 
 init().catch(console.error);

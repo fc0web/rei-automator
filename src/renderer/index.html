@@ -17,13 +17,13 @@
         <span class="phase-badge">Phase 7</span>
       </div>
       <div class="header-center">
-        <span id="current-script-name" class="current-script">無題のスクリプト</span>
+        <span id="current-script-name" class="current-script" data-i18n-default="untitled-script"></span>
         <span id="dirty-indicator" class="dirty-dot" hidden>●</span>
       </div>
       <div class="header-right">
-        <button id="btn-new" class="header-btn" title="新規作成">📄 新規</button>
-        <button id="btn-save" class="header-btn" title="保存 (Ctrl+S)">💾 保存</button>
-        <button id="btn-settings" class="header-btn icon-only" title="設定">⚙️</button>
+        <button id="btn-new" class="header-btn" data-i18n-title="menu.file.new">📄 <span data-i18n="menu.file.new"></span></button>
+        <button id="btn-save" class="header-btn" data-i18n-title="menu.file.save">💾 <span data-i18n="menu.file.save"></span></button>
+        <button id="btn-settings" class="header-btn icon-only" data-i18n-title="menu.tools.settings">⚙️</button>
       </div>
     </header>
 
@@ -33,22 +33,22 @@
       <!-- ===== サイドパネル（A: スクリプト管理） ===== -->
       <aside id="sidebar">
         <div class="sidebar-header">
-          <span class="sidebar-title">📂 スクリプト</span>
-          <button id="btn-sidebar-toggle" class="icon-btn" title="サイドバーを閉じる">◀</button>
+          <span class="sidebar-title">📂 <span data-i18n="sidebar.scripts"></span></span>
+          <button id="btn-sidebar-toggle" class="icon-btn" data-i18n-title="menu.window.close">◀</button>
         </div>
 
         <div class="sidebar-search">
-          <input id="script-search" type="text" placeholder="🔍 検索..." />
+          <input id="script-search" type="text" data-i18n-placeholder="sidebar.search" />
         </div>
 
         <div id="script-list" class="script-list">
           <!-- JavaScriptで動的に生成 -->
-          <div class="empty-state">スクリプトがありません</div>
+          <div class="empty-state" data-i18n="sidebar.noScripts"></div>
         </div>
 
         <div class="sidebar-footer">
-          <button id="btn-import" class="sidebar-btn">📥 インポート</button>
-          <button id="btn-export" class="sidebar-btn">📤 エクスポート</button>
+          <button id="btn-import" class="sidebar-btn">📥 <span data-i18n="sidebar.import"></span></button>
+          <button id="btn-export" class="sidebar-btn">📤 <span data-i18n="sidebar.export"></span></button>
         </div>
       </aside>
 
@@ -59,135 +59,123 @@
         <section id="editor-section">
           <div class="section-toolbar">
             <div class="toolbar-left">
-              <label class="toolbar-label">📝 Reiスクリプト</label>
+              <label class="toolbar-label">📝 <span data-i18n="editor.label"></span></label>
             </div>
             <div class="toolbar-right">
-              <!-- D: 変数パネルトグル -->
-              <button id="btn-vars-toggle" class="toolbar-btn" title="変数パネル">🔤 変数</button>
-              <!-- 日本語入力 -->
-              <button id="btn-nlp-toggle" class="toolbar-btn" title="日本語変換">🇯🇵 変換</button>
+              <button id="btn-vars-toggle" class="toolbar-btn" data-i18n-title="panel.vars">🔤 <span data-i18n="panel.vars.short"></span></button>
+              <button id="btn-nlp-toggle" class="toolbar-btn" data-i18n-title="editor.nlConvert">🇯🇵 <span data-i18n="editor.nlConvert.short"></span></button>
             </div>
           </div>
 
-          <!-- D: パラメータ入力ダイアログエリア（実行前に表示） -->
+          <!-- D: パラメータ入力ダイアログエリア -->
           <div id="params-panel" class="params-panel" hidden>
             <div class="params-header">
-              <span>⚙️ パラメータ設定</span>
+              <span>⚙️ <span data-i18n="params.title"></span></span>
               <button id="btn-params-close" class="icon-btn">✕</button>
             </div>
-            <div id="params-inputs" class="params-inputs">
-              <!-- 動的生成 -->
-            </div>
+            <div id="params-inputs" class="params-inputs"></div>
             <div class="params-actions">
-              <button id="btn-params-run" class="run-btn">▶ この設定で実行</button>
-              <button id="btn-params-cancel" class="cancel-btn">キャンセル</button>
+              <button id="btn-params-run" class="run-btn" data-i18n="params.runWith"></button>
+              <button id="btn-params-cancel" class="cancel-btn" data-i18n="button.cancel"></button>
             </div>
           </div>
 
           <!-- スクリプトエディタ -->
           <textarea id="script-editor" spellcheck="false"
-            placeholder="// Reiスクリプトを入力してください&#10;// 例:&#10;// param target = &quot;Notepad&quot;  // 対象ウィンドウ名&#10;// set count = 3&#10;// loop $count:&#10;//   click(100, 200)&#10;//   wait(1s)"></textarea>
+            data-i18n-placeholder="editor.placeholder"></textarea>
 
           <!-- 日本語入力エリア -->
           <div id="nlp-area" class="nlp-area" hidden>
-            <input id="nlp-input" type="text" placeholder="例: Chromeを開いてGoogleで検索する" />
-            <button id="btn-nlp-convert" class="nlp-btn">変換 →</button>
+            <input id="nlp-input" type="text" data-i18n-placeholder="editor.nlInput" />
+            <button id="btn-nlp-convert" class="nlp-btn" data-i18n="editor.nlConvert.btn"></button>
           </div>
         </section>
 
         <!-- ===== 実行コントロール ===== -->
         <div id="control-bar">
           <div class="control-left">
-            <!-- B: エラーポリシー選択 -->
-            <label class="control-label">エラー時:</label>
+            <label class="control-label" data-i18n="control.onError"></label>
             <select id="error-policy" class="control-select">
-              <option value="stop">停止</option>
-              <option value="skip">スキップ</option>
-              <option value="retry:2">2回リトライ</option>
-              <option value="retry:3">3回リトライ</option>
-              <option value="retry:5">5回リトライ</option>
+              <option value="stop" data-i18n="control.stop"></option>
+              <option value="skip" data-i18n="control.skip"></option>
+              <option value="retry:2" data-i18n="control.retry2"></option>
+              <option value="retry:3" data-i18n="control.retry3"></option>
+              <option value="retry:5" data-i18n="control.retry5"></option>
             </select>
           </div>
           <div class="control-center">
-            <button id="btn-run" class="run-btn large">▶ 実行</button>
-            <button id="btn-stop" class="stop-btn large" disabled>■ 停止</button>
+            <button id="btn-run" class="run-btn large" data-i18n="button.run"></button>
+            <button id="btn-stop" class="stop-btn large" disabled data-i18n="button.stop"></button>
           </div>
           <div class="control-right">
-            <!-- C: ステップ実行 -->
             <label class="toggle-label">
               <input id="step-mode-toggle" type="checkbox" />
-              <span>ステップ実行</span>
+              <span data-i18n="control.stepMode"></span>
             </label>
-            <button id="btn-step-next" class="step-btn" disabled title="次のステップへ">⏭ 次へ</button>
-            <button id="btn-step-continue" class="step-btn" disabled title="ステップモード解除して継続">▶▶ 継続</button>
+            <button id="btn-step-next" class="step-btn" disabled data-i18n-title="control.stepNext">⏭ <span data-i18n="control.next"></span></button>
+            <button id="btn-step-continue" class="step-btn" disabled data-i18n-title="control.stepContinue">▶▶ <span data-i18n="control.continue"></span></button>
           </div>
         </div>
 
-        <!-- ===== 下部パネル（ログ・変数） ===== -->
+        <!-- ===== 下部パネル ===== -->
         <div id="bottom-panels">
-          <!-- タブ -->
           <div class="panel-tabs">
-            <button class="panel-tab active" data-panel="log">📋 実行ログ</button>
-            <button class="panel-tab" data-panel="vars">🔤 変数一覧</button>
-            <button class="panel-tab" data-panel="errors">❌ エラー一覧</button>
-            <button class="panel-tab" data-panel="history">📅 実行履歴</button>
-            <button class="panel-tab" data-panel="schedule">⏰ スケジュール</button>
+            <button class="panel-tab active" data-panel="log">📋 <span data-i18n="log.title"></span></button>
+            <button class="panel-tab" data-panel="vars">🔤 <span data-i18n="panel.vars"></span></button>
+            <button class="panel-tab" data-panel="errors">❌ <span data-i18n="panel.errors"></span></button>
+            <button class="panel-tab" data-panel="history">📅 <span data-i18n="panel.history"></span></button>
+            <button class="panel-tab" data-panel="schedule">⏰ <span data-i18n="schedule.title"></span></button>
             <div class="tab-actions">
-              <button id="btn-log-clear" class="tab-action-btn" title="ログをクリア">🗑</button>
-              <button id="btn-log-export" class="tab-action-btn" title="ログをエクスポート">💾</button>
+              <button id="btn-log-clear" class="tab-action-btn" data-i18n-title="log.clear">🗑</button>
+              <button id="btn-log-export" class="tab-action-btn" data-i18n-title="button.save">💾</button>
             </div>
           </div>
 
-          <!-- C: ログパネル -->
           <div id="panel-log" class="panel-content active">
             <div id="log-container" class="log-container">
-              <div class="log-empty">実行するとログが表示されます</div>
+              <div class="log-empty" data-i18n="log.empty"></div>
             </div>
           </div>
 
-          <!-- D: 変数一覧パネル -->
           <div id="panel-vars" class="panel-content">
             <div class="vars-toolbar">
-              <button id="btn-var-add" class="small-btn">+ 変数を追加</button>
+              <button id="btn-var-add" class="small-btn">+ <span data-i18n="panel.vars.add"></span></button>
             </div>
             <table id="vars-table" class="vars-table">
               <thead>
                 <tr>
-                  <th>変数名</th>
-                  <th>値</th>
-                  <th>型</th>
-                  <th>操作</th>
+                  <th data-i18n="panel.vars.name"></th>
+                  <th data-i18n="panel.vars.value"></th>
+                  <th data-i18n="panel.vars.type"></th>
+                  <th data-i18n="panel.vars.action"></th>
                 </tr>
               </thead>
               <tbody id="vars-body">
                 <tr class="empty-row">
-                  <td colspan="4">変数はありません</td>
+                  <td colspan="4" data-i18n="panel.vars.empty"></td>
                 </tr>
               </tbody>
             </table>
           </div>
 
-          <!-- B: エラー一覧パネル -->
           <div id="panel-errors" class="panel-content">
             <div id="errors-container" class="errors-container">
-              <div class="log-empty">エラーはありません</div>
+              <div class="log-empty" data-i18n="panel.errors.empty"></div>
             </div>
           </div>
 
-          <!-- A: 実行履歴パネル -->
           <div id="panel-history" class="panel-content">
             <div id="history-container" class="history-container">
-              <div class="log-empty">履歴はありません</div>
+              <div class="log-empty" data-i18n="panel.history.empty"></div>
             </div>
           </div>
 
-          <!-- Phase 7: スケジュールパネル -->
           <div id="panel-schedule" class="panel-content">
             <div class="schedule-toolbar">
-              <button id="btn-schedule-add" class="small-btn">+ スケジュール追加</button>
+              <button id="btn-schedule-add" class="small-btn">+ <span data-i18n="schedule.add"></span></button>
             </div>
             <div id="schedule-list" class="schedule-list">
-              <div class="log-empty">スケジュールはありません</div>
+              <div class="log-empty" data-i18n="panel.schedule.empty"></div>
             </div>
           </div>
         </div>
@@ -201,18 +189,18 @@
   <div id="modal-save" class="modal" hidden>
     <div class="modal-content">
       <div class="modal-header">
-        <span>💾 スクリプトを保存</span>
+        <span>💾 <span data-i18n="modal.save.title"></span></span>
         <button class="modal-close icon-btn">✕</button>
       </div>
       <div class="modal-body">
-        <label>スクリプト名</label>
-        <input id="save-name-input" type="text" placeholder="スクリプト名を入力..." />
-        <label>タグ（カンマ区切り）</label>
-        <input id="save-tags-input" type="text" placeholder="例: 自動化, ブラウザ, 定期実行" />
+        <label data-i18n="modal.save.name"></label>
+        <input id="save-name-input" type="text" data-i18n-placeholder="modal.save.namePlaceholder" />
+        <label data-i18n="modal.save.tags"></label>
+        <input id="save-tags-input" type="text" data-i18n-placeholder="modal.save.tagsPlaceholder" />
       </div>
       <div class="modal-footer">
-        <button id="btn-modal-save-confirm" class="run-btn">保存</button>
-        <button class="modal-close cancel-btn">キャンセル</button>
+        <button id="btn-modal-save-confirm" class="run-btn" data-i18n="button.save"></button>
+        <button class="modal-close cancel-btn" data-i18n="button.cancel"></button>
       </div>
     </div>
   </div>
@@ -226,8 +214,8 @@
         <code id="step-command-info" class="step-command-info"></code>
       </div>
       <div class="step-btns">
-        <button id="btn-step-next-float" class="run-btn">⏭ 次へ</button>
-        <button id="btn-step-continue-float" class="step-btn">▶▶ 継続</button>
+        <button id="btn-step-next-float" class="run-btn">⏭ <span data-i18n="control.next"></span></button>
+        <button id="btn-step-continue-float" class="step-btn">▶▶ <span data-i18n="control.continue"></span></button>
       </div>
     </div>
   </div>
@@ -239,63 +227,56 @@
   <div id="modal-schedule" class="modal" hidden>
     <div class="modal-content">
       <div class="modal-header">
-        <span>⏰ スケジュール作成</span>
+        <span>⏰ <span data-i18n="schedule.create"></span></span>
         <button class="modal-close icon-btn">✕</button>
       </div>
       <div class="modal-body">
-        <label>スケジュール名</label>
-        <input id="sched-name" type="text" placeholder="例: 日次レポート自動化" />
+        <label data-i18n="schedule.nameLabel"></label>
+        <input id="sched-name" type="text" data-i18n-placeholder="schedule.namePlaceholder" />
 
-        <label>対象スクリプト</label>
+        <label data-i18n="schedule.targetScript"></label>
         <select id="sched-script" class="control-select wide">
-          <option value="">-- スクリプトを選択 --</option>
+          <option value="" data-i18n="schedule.selectScript"></option>
         </select>
 
-        <label>実行タイプ</label>
+        <label data-i18n="schedule.execType"></label>
         <select id="sched-type" class="control-select wide">
-          <option value="once">1回のみ（指定日時）</option>
-          <option value="interval">間隔（N分ごと）</option>
-          <option value="daily">毎日（指定時刻）</option>
-          <option value="weekly">毎週（指定曜日・時刻）</option>
+          <option value="once" data-i18n="schedule.once"></option>
+          <option value="interval" data-i18n="schedule.intervalOption"></option>
+          <option value="daily" data-i18n="schedule.daily"></option>
+          <option value="weekly" data-i18n="schedule.weekly"></option>
         </select>
 
-        <!-- once: 日時 -->
         <div id="sched-opt-once" class="sched-option">
-          <label>実行日時</label>
+          <label data-i18n="schedule.time"></label>
           <input id="sched-run-at" type="datetime-local" />
         </div>
-
-        <!-- interval: 分 -->
         <div id="sched-opt-interval" class="sched-option" hidden>
-          <label>間隔（分）</label>
+          <label data-i18n="schedule.intervalMinutes"></label>
           <input id="sched-interval" type="number" min="1" value="30" />
         </div>
-
-        <!-- daily: 時刻 -->
         <div id="sched-opt-daily" class="sched-option" hidden>
-          <label>実行時刻</label>
+          <label data-i18n="schedule.time"></label>
           <input id="sched-daily-time" type="time" value="09:00" />
         </div>
-
-        <!-- weekly: 曜日 + 時刻 -->
         <div id="sched-opt-weekly" class="sched-option" hidden>
-          <label>曜日</label>
+          <label data-i18n="schedule.dayOfWeek"></label>
           <select id="sched-weekly-day" class="control-select wide">
-            <option value="1">月曜日</option>
-            <option value="2">火曜日</option>
-            <option value="3">水曜日</option>
-            <option value="4">木曜日</option>
-            <option value="5">金曜日</option>
-            <option value="6">土曜日</option>
-            <option value="0">日曜日</option>
+            <option value="1" data-i18n="day.mon"></option>
+            <option value="2" data-i18n="day.tue"></option>
+            <option value="3" data-i18n="day.wed"></option>
+            <option value="4" data-i18n="day.thu"></option>
+            <option value="5" data-i18n="day.fri"></option>
+            <option value="6" data-i18n="day.sat"></option>
+            <option value="0" data-i18n="day.sun"></option>
           </select>
-          <label>実行時刻</label>
+          <label data-i18n="schedule.time"></label>
           <input id="sched-weekly-time" type="time" value="09:00" />
         </div>
       </div>
       <div class="modal-footer">
-        <button id="btn-sched-confirm" class="run-btn">作成</button>
-        <button class="modal-close cancel-btn">キャンセル</button>
+        <button id="btn-sched-confirm" class="run-btn" data-i18n="schedule.createBtn"></button>
+        <button class="modal-close cancel-btn" data-i18n="button.cancel"></button>
       </div>
     </div>
   </div>

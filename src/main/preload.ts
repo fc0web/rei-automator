@@ -1,6 +1,7 @@
 /**
  * Rei Automator - Preload Script
  * レンダラープロセスに安全なAPIを公開
+ * i18n 対応版
  */
 
 import { contextBridge, ipcRenderer } from 'electron';
@@ -94,8 +95,33 @@ declare global {
       templateTestMatch(args: { screenshotPath: string; templateName: string; threshold?: number }): Promise<{ success: boolean; result?: any; error?: string }>;
       templateGetPreview(name: string): Promise<{ success: boolean; base64?: string; name?: string; error?: string }>;
     };
+    // ── i18n API ──
+    i18nAPI: {
+      t: (key: string, params?: Record<string, string | number>) => string;
+      getLanguage: () => string;
+      setLanguage: (lang: string) => void;
+      getSupportedLanguages: () => Array<{ code: string; name: string; nativeName: string; direction: string }>;
+      getAllTranslations: () => Promise<{ lang: string; translations: Record<string, string> }>;
+      onLanguageChanged: (callback: (lang: string) => void) => void;
+    };
   }
 }
+
+// ── i18n API ブリッジ ──
+contextBridge.exposeInMainWorld('i18nAPI', {
+  t: (key: string, params?: Record<string, string | number>) =>
+    ipcRenderer.sendSync('i18n-translate', key, params),
+  getLanguage: () =>
+    ipcRenderer.sendSync('i18n-get-language'),
+  setLanguage: (lang: string) =>
+    ipcRenderer.send('i18n-set-language', lang),
+  getSupportedLanguages: () =>
+    ipcRenderer.sendSync('i18n-get-languages'),
+  getAllTranslations: () =>
+    ipcRenderer.invoke('i18n-get-all-translations'),
+  onLanguageChanged: (callback: (lang: string) => void) =>
+    ipcRenderer.on('i18n-language-changed', (_event, lang) => callback(lang)),
+});
 
 
 // Phase 6: reiAPI ブリッジ

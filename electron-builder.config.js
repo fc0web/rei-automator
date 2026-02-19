@@ -1,26 +1,26 @@
 ﻿/**
  * Rei Automator - electron-builder configuration
- * Phase 7: インストーラー作成
+ * Phase 7: �C���X�g�[���[�쐬
  * 
- * 使い方:
- *   npm run package        → ポータブル版 (.exe)
- *   npm run package:nsis   → NSISインストーラー (.exe)
- *   npm run package:dir    → アンパッケージ版（テスト用）
+ * �g����:
+ *   npm run package        �� �|�[�^�u���� (.exe)
+ *   npm run package:nsis   �� NSIS�C���X�g�[���[ (.exe)
+ *   npm run package:dir    �� �A���p�b�P�[�W�Łi�e�X�g�p�j
  */
 
 module.exports = {
-  // ── アプリ基本情報 ──
+  // ���� �A�v����{��� ����
   appId: "com.fc0web.rei-automator",
   productName: "Rei Automator",
   copyright: "Copyright © 2024-2026 Nobuki Fujimoto",
 
-  // ── ビルド対象 ──
+  // ���� �r���h�Ώ� ����
   directories: {
     output: "dist",
     buildResources: "assets"
   },
 
-  // ── ファイル指定 ──
+  // ���� �t�@�C���w�� ����
   files: [
     "dist/**/*",
     "src/renderer/**/*",
@@ -36,13 +36,13 @@ module.exports = {
     "!phase4-setup.ps1"
   ],
 
-  // ── メインプロセスのエントリーポイント ──
-  // tsconfig.main.json で build/ に出力される前提
+  // ���� ���C���v���Z�X�̃G���g���[�|�C���g ����
+  // tsconfig.main.json �� build/ �ɏo�͂����O��
   extraMetadata: {
     main: "dist/main/main.js"
   },
 
-  // ── Windows設定 ──
+  // ���� Windows�ݒ� ����
   win: {
     signAndEditExecutable: false,
     target: [
@@ -56,12 +56,12 @@ module.exports = {
       }
     ],
     icon: "assets/icon.ico",
-    // コード署名（将来用、現時点ではスキップ）
+    // �R�[�h�����i�����p�A�����_�ł̓X�L�b�v�j
     // certificateFile: "",
     // certificatePassword: "",
   },
 
-  // ── NSISインストーラー設定 ──
+  // ���� NSIS�C���X�g�[���[�ݒ� ����
   nsis: {
     oneClick: false,
     allowToChangeInstallationDirectory: true,
@@ -71,38 +71,43 @@ module.exports = {
     createDesktopShortcut: true,
     createStartMenuShortcut: true,
     shortcutName: "Rei Automator",
-    // 日本語インストーラー
+    // ���{��C���X�g�[���[
     language: "1041",
     installerLanguages: ["ja", "en"],
-    // ライセンス
+    // ���C�Z���X
     // license: "LICENSE",
   },
 
-  // ── ポータブル版設定 ──
+  // ���� �|�[�^�u���Őݒ� ����
   portable: {
     artifactName: "ReiAutomator-${version}-portable.exe"
   },
 
-  // ── asar設定 ──
+  // ���� asar�ݒ� ����
   asar: true,
   asarUnpack: [
-    // ネイティブモジュールがある場合はここに追加
+    // �l�C�e�B�u���W���[��������ꍇ�͂����ɒǉ�
     "**/*.node",
     "**/node_modules/node-ffi-napi/**",
     "**/node_modules/ref-napi/**",
     "**/node_modules/screenshot-desktop/**"
   ],
 
-  // ── extraResources: アプリ外に配置するファイル ──
+  // ���� extraResources: �A�v���O�ɔz�u����t�@�C�� ����
   extraResources: [
     {
       from: "scripts",
       to: "scripts",
       filter: ["**/*.rei"]
+    },
+    {
+      from: "locales",
+      to: "locales",
+      filter: ["*.json"]
     }
   ],
 
-  // ── publish設定（将来のauto-update用） ──
+  // ���� publish�ݒ�i������auto-update�p�j ����
   publish: [
     {
       provider: "github",
@@ -111,7 +116,8 @@ module.exports = {
     }
   ],
 
-  // ── ビルドフック ──
+  // ���� �r���h�t�b�N ����
   afterSign: null,
   afterPack: null,
 };
+
