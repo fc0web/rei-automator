@@ -327,7 +327,8 @@ async function refreshTemplateList(): Promise<void> {
         if (preview.success && preview.base64) {
           thumbSrc = `data:image/png;base64,${preview.base64}`;
         }
-      } catch { /* ignore */ }
+      } catch { // ignore
+      }
 
       item.innerHTML = `
         <img class="template-thumb" src="${thumbSrc}" alt="${tpl.name}" />

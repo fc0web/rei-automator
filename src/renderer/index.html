@@ -7,180 +7,222 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div class="container">
-    <!-- ヘッダー -->
-    <header class="header">
-      <h1>Rei Automator</h1>
-      <span class="version">v0.4.0</span>
+  <div id="app">
+
+    <!-- ========== ヘッダー ========== -->
+    <header id="app-header">
+      <div class="header-left">
+        <span class="app-logo">⚡</span>
+        <span class="app-title">Rei Automator</span>
+        <span class="phase-badge">Phase 6</span>
+      </div>
+      <div class="header-center">
+        <span id="current-script-name" class="current-script">無題のスクリプト</span>
+        <span id="dirty-indicator" class="dirty-dot" hidden>●</span>
+      </div>
+      <div class="header-right">
+        <button id="btn-new" class="header-btn" title="新規作成">📄 新規</button>
+        <button id="btn-save" class="header-btn" title="保存 (Ctrl+S)">💾 保存</button>
+        <button id="btn-settings" class="header-btn icon-only" title="設定">⚙️</button>
+      </div>
     </header>
 
-    <!-- ツールバー -->
-    <div class="toolbar">
-      <button id="btn-capture" class="toolbar-btn" title="画面をキャプチャ">
-        📷 キャプチャ
-      </button>
-      <button id="btn-target" class="toolbar-btn" title="キャプチャ画像から座標を指定">
-        🎯 座標指定
-      </button>
-      <div class="toolbar-separator"></div>
-      <button id="btn-open" class="toolbar-btn" title="スクリプトを開く">
-        📂 開く
-      </button>
-      <button id="btn-save" class="toolbar-btn" title="スクリプトを保存">
-        💾 保存
-      </button>
-    </div>
+    <!-- ========== メインレイアウト ========== -->
+    <div id="main-layout">
 
-    <!-- 日本語入力セクション -->
-    <div class="section">
-      <div class="section-header">
-        <label for="japanese-input">日本語入力:</label>
-        <button id="btn-convert" class="btn-small" disabled>
-          🔄 コード生成
-        </button>
-      </div>
-      <textarea
-        id="japanese-input"
-        class="input-area"
-        placeholder="例：座標(500,400)をクリックして、3秒待って、&quot;Hello&quot;と入力&#10;例：100,200をクリックして500ミリ秒待つを5回繰り返す&#10;例：Ctrl+Cを押して、1秒待って、Ctrl+Vを押す"
-      ></textarea>
-    </div>
+      <!-- ===== サイドパネル（A: スクリプト管理） ===== -->
+      <aside id="sidebar">
+        <div class="sidebar-header">
+          <span class="sidebar-title">📂 スクリプト</span>
+          <button id="btn-sidebar-toggle" class="icon-btn" title="サイドバーを閉じる">◀</button>
+        </div>
 
-    <!-- Reiコードセクション -->
-    <div class="section">
-      <div class="section-header">
-        <label for="rei-code">Reiコード:</label>
-      </div>
-      <textarea
-        id="rei-code"
-        class="code-area"
-        placeholder="// Reiコードを記述してください&#10;// 例：&#10;click(100, 200)&#10;wait(3s)&#10;type(&quot;Hello&quot;)"
-        spellcheck="false"
-      ></textarea>
-    </div>
+        <div class="sidebar-search">
+          <input id="script-search" type="text" placeholder="🔍 検索..." />
+        </div>
 
-    <!-- 実行ログ -->
-    <div class="section">
-      <div class="section-header">
-        <label>実行ログ:</label>
-        <button id="btn-clear-log" class="btn-small" onclick="document.getElementById('log-area').innerHTML=''">
-          🗑 クリア
-        </button>
-      </div>
-      <div id="log-area" class="log-area"></div>
-    </div>
+        <div id="script-list" class="script-list">
+          <!-- JavaScriptで動的に生成 -->
+          <div class="empty-state">スクリプトがありません</div>
+        </div>
 
-    <!-- 実行コントロール -->
-    <div class="controls">
-      <button id="btn-execute" class="btn-primary">
-        ▶ 実行
-      </button>
-      <button id="btn-stop" class="btn-danger" disabled>
-        ⏹ 停止
-      </button>
-      <button id="btn-pause" class="btn-secondary" disabled>
-        ⏸ 一時停止
-      </button>
-      <div class="status">
-        <span class="status-label">ステータス:</span>
-        <span id="status-text" class="status-text">待機中</span>
+        <div class="sidebar-footer">
+          <button id="btn-import" class="sidebar-btn">📥 インポート</button>
+          <button id="btn-export" class="sidebar-btn">📤 エクスポート</button>
+        </div>
+      </aside>
+
+      <!-- ===== メインエリア ===== -->
+      <main id="main-area">
+
+        <!-- エディタセクション -->
+        <section id="editor-section">
+          <div class="section-toolbar">
+            <div class="toolbar-left">
+              <label class="toolbar-label">📝 Reiスクリプト</label>
+            </div>
+            <div class="toolbar-right">
+              <!-- D: 変数パネルトグル -->
+              <button id="btn-vars-toggle" class="toolbar-btn" title="変数パネル">🔤 変数</button>
+              <!-- 日本語入力 -->
+              <button id="btn-nlp-toggle" class="toolbar-btn" title="日本語変換">🇯🇵 変換</button>
+            </div>
+          </div>
+
+          <!-- D: パラメータ入力ダイアログエリア（実行前に表示） -->
+          <div id="params-panel" class="params-panel" hidden>
+            <div class="params-header">
+              <span>⚙️ パラメータ設定</span>
+              <button id="btn-params-close" class="icon-btn">✕</button>
+            </div>
+            <div id="params-inputs" class="params-inputs">
+              <!-- 動的生成 -->
+            </div>
+            <div class="params-actions">
+              <button id="btn-params-run" class="run-btn">▶ この設定で実行</button>
+              <button id="btn-params-cancel" class="cancel-btn">キャンセル</button>
+            </div>
+          </div>
+
+          <!-- スクリプトエディタ -->
+          <textarea id="script-editor" spellcheck="false"
+            placeholder="// Reiスクリプトを入力してください&#10;// 例:&#10;// param target = &quot;Notepad&quot;  // 対象ウィンドウ名&#10;// set count = 3&#10;// loop $count:&#10;//   click(100, 200)&#10;//   wait(1s)"></textarea>
+
+          <!-- 日本語入力エリア -->
+          <div id="nlp-area" class="nlp-area" hidden>
+            <input id="nlp-input" type="text" placeholder="例: Chromeを開いてGoogleで検索する" />
+            <button id="btn-nlp-convert" class="nlp-btn">変換 →</button>
+          </div>
+        </section>
+
+        <!-- ===== 実行コントロール ===== -->
+        <div id="control-bar">
+          <div class="control-left">
+            <!-- B: エラーポリシー選択 -->
+            <label class="control-label">エラー時:</label>
+            <select id="error-policy" class="control-select">
+              <option value="stop">停止</option>
+              <option value="skip">スキップ</option>
+              <option value="retry:2">2回リトライ</option>
+              <option value="retry:3">3回リトライ</option>
+              <option value="retry:5">5回リトライ</option>
+            </select>
+          </div>
+          <div class="control-center">
+            <button id="btn-run" class="run-btn large">▶ 実行</button>
+            <button id="btn-stop" class="stop-btn large" disabled>■ 停止</button>
+          </div>
+          <div class="control-right">
+            <!-- C: ステップ実行 -->
+            <label class="toggle-label">
+              <input id="step-mode-toggle" type="checkbox" />
+              <span>ステップ実行</span>
+            </label>
+            <button id="btn-step-next" class="step-btn" disabled title="次のステップへ">⏭ 次へ</button>
+            <button id="btn-step-continue" class="step-btn" disabled title="ステップモード解除して継続">▶▶ 継続</button>
+          </div>
+        </div>
+
+        <!-- ===== 下部パネル（ログ・変数） ===== -->
+        <div id="bottom-panels">
+          <!-- タブ -->
+          <div class="panel-tabs">
+            <button class="panel-tab active" data-panel="log">📋 実行ログ</button>
+            <button class="panel-tab" data-panel="vars">🔤 変数一覧</button>
+            <button class="panel-tab" data-panel="errors">❌ エラー一覧</button>
+            <button class="panel-tab" data-panel="history">📅 実行履歴</button>
+            <div class="tab-actions">
+              <button id="btn-log-clear" class="tab-action-btn" title="ログをクリア">🗑</button>
+              <button id="btn-log-export" class="tab-action-btn" title="ログをエクスポート">💾</button>
+            </div>
+          </div>
+
+          <!-- C: ログパネル -->
+          <div id="panel-log" class="panel-content active">
+            <div id="log-container" class="log-container">
+              <div class="log-empty">実行するとログが表示されます</div>
+            </div>
+          </div>
+
+          <!-- D: 変数一覧パネル -->
+          <div id="panel-vars" class="panel-content">
+            <div class="vars-toolbar">
+              <button id="btn-var-add" class="small-btn">+ 変数を追加</button>
+            </div>
+            <table id="vars-table" class="vars-table">
+              <thead>
+                <tr>
+                  <th>変数名</th>
+                  <th>値</th>
+                  <th>型</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="vars-body">
+                <tr class="empty-row">
+                  <td colspan="4">変数はありません</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- B: エラー一覧パネル -->
+          <div id="panel-errors" class="panel-content">
+            <div id="errors-container" class="errors-container">
+              <div class="log-empty">エラーはありません</div>
+            </div>
+          </div>
+
+          <!-- A: 実行履歴パネル -->
+          <div id="panel-history" class="panel-content">
+            <div id="history-container" class="history-container">
+              <div class="log-empty">履歴はありません</div>
+            </div>
+          </div>
+        </div>
+
+      </main>
+    </div><!-- /main-layout -->
+
+  </div><!-- /app -->
+
+  <!-- ========== モーダル: 名前付き保存 ========== -->
+  <div id="modal-save" class="modal" hidden>
+    <div class="modal-content">
+      <div class="modal-header">
+        <span>💾 スクリプトを保存</span>
+        <button class="modal-close icon-btn">✕</button>
+      </div>
+      <div class="modal-body">
+        <label>スクリプト名</label>
+        <input id="save-name-input" type="text" placeholder="スクリプト名を入力..." />
+        <label>タグ（カンマ区切り）</label>
+        <input id="save-tags-input" type="text" placeholder="例: 自動化, ブラウザ, 定期実行" />
+      </div>
+      <div class="modal-footer">
+        <button id="btn-modal-save-confirm" class="run-btn">保存</button>
+        <button class="modal-close cancel-btn">キャンセル</button>
       </div>
     </div>
-
-    <!-- フッター -->
-    <footer class="footer">
-      <div class="footer-left">
-        Powered by <strong>Rei Language</strong>
-      </div>
-      <div class="footer-right">
-        © 2024-2026 Nobuki Fujimoto
-      </div>
-    </footer>
   </div>
 
-  <!-- ========== キャプチャ・座標指定オーバーレイ ========== -->
-  <div id="capture-overlay" class="capture-overlay" style="display:none;">
-    <div class="capture-modal">
-      <div class="capture-modal-header">
-        <h2 id="capture-modal-title">📷 画面キャプチャ</h2>
-        <div class="capture-modal-actions">
-          <button id="btn-capture-new" class="btn-small" title="新しくキャプチャ">
-            📷 再キャプチャ
-          </button>
-          <button id="btn-capture-close" class="btn-small btn-close-modal" title="閉じる">
-            ✕ 閉じる
-          </button>
-        </div>
+  <!-- ========== ステップ実行インジケーター ========== -->
+  <div id="step-indicator" class="step-indicator" hidden>
+    <div class="step-indicator-inner">
+      <span class="step-icon">⏸</span>
+      <div class="step-info">
+        <span id="step-line-info" class="step-line-info">Line 1</span>
+        <code id="step-command-info" class="step-command-info"></code>
       </div>
-
-      <div class="capture-toolbar">
-        <label>挿入コマンド:</label>
-        <select id="capture-command-type">
-          <option value="click">click(x, y)</option>
-          <option value="dblclick">dblclick(x, y)</option>
-          <option value="rightclick">rightclick(x, y)</option>
-          <option value="move">move(x, y)</option>
-        </select>
-        <span id="capture-coords" class="capture-coords">座標: ---</span>
-        <!-- Phase 4: テンプレート作成モード -->
-        <button id="btn-template-mode" class="btn-small" title="テンプレート切り出しモード" style="margin-left:auto;">
-          📋 テンプレート作成
-        </button>
-      </div>
-
-      <div class="capture-image-container" id="capture-image-container">
-        <div id="capture-loading" class="capture-loading" style="display:none;">
-          ⏳ キャプチャ中...
-        </div>
-        <div id="capture-empty" class="capture-empty">
-          「📷 キャプチャ」ボタンまたは上の「📷 再キャプチャ」で画面をキャプチャ
-        </div>
-        <canvas id="capture-canvas" class="capture-canvas" style="display:none;"></canvas>
-        <div id="capture-markers" class="capture-markers"></div>
-      </div>
-
-      <div class="capture-history">
-        <label>選択した座標:</label>
-        <div id="capture-history-list" class="capture-history-list">
-          <span class="capture-history-empty">画像をクリックして座標を選択してください</span>
-        </div>
-        <div class="capture-history-actions">
-          <button id="btn-insert-coords" class="btn-small" disabled>
-            📋 コードに挿入
-          </button>
-          <button id="btn-clear-coords" class="btn-small" disabled>
-            🗑 クリア
-          </button>
-        </div>
+      <div class="step-btns">
+        <button id="btn-step-next-float" class="run-btn">⏭ 次へ</button>
+        <button id="btn-step-continue-float" class="step-btn">▶▶ 継続</button>
       </div>
     </div>
   </div>
 
-  <!-- Phase 4: テンプレート管理パネル -->
-  <div style="padding: 0 16px 16px;">
-    <div style="background:#1e1e1e;border:1px solid #333;border-radius:6px;padding:12px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-        <h3 style="margin:0;font-size:14px;">📋 テンプレート一覧</h3>
-        <button id="btn-refresh-templates" class="btn-small" title="更新" onclick="refreshTemplateList()">🔄</button>
-      </div>
-      <div id="template-list" style="min-height:40px;max-height:200px;overflow-y:auto;">
-        <div class="template-list-empty" style="color:#666;font-size:12px;">テンプレートなし</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Phase 4: テンプレート名入力ダイアログ -->
-  <div id="template-name-dialog" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;align-items:center;justify-content:center;">
-    <div style="background:#2a2a2a;border:1px solid #555;border-radius:8px;padding:24px;min-width:300px;">
-      <h3 style="margin:0 0 12px;">テンプレート名を入力</h3>
-      <input type="text" id="template-name-input" placeholder="例: ok-button"
-        style="width:100%;box-sizing:border-box;padding:8px;background:#1a1a1a;border:1px solid #555;border-radius:4px;color:#e0e0e0;font-size:14px;" />
-      <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end;">
-        <button id="btn-save-template" class="btn-small" style="background:#0066cc;">💾 保存</button>
-        <button id="btn-cancel-template" class="btn-small">キャンセル</button>
-      </div>
-    </div>
-  </div>
+  <!-- ========== トースト通知 ========== -->
+  <div id="toast-container" class="toast-container"></div>
 
   <script src="renderer.js"></script>
 </body>

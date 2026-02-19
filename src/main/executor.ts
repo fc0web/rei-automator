@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Rei Automator - 実行管理
  * メインプロセスでの実行管理とIPCブリッジ
  */
@@ -11,10 +11,14 @@ import { WindowsBackend } from '../lib/auto/windows-backend';
 import { StubBackend } from '../lib/auto/stub-backend';
 import { ExecutionResult } from '../lib/core/types';
 import { ImageMatcher } from '../lib/auto/image-matcher';
+import { VariableStore, preprocessLine } from '../lib/core/variables';
+import { Logger } from '../lib/core/logger';
 
 export class ReiExecutor {
   private runtime: ReiRuntime;
   private window: BrowserWindow | null = null;
+  private logger: Logger | null = null;
+  private varStore: VariableStore = new VariableStore();
   private useStub: boolean;
 
   constructor(useStub = false) {
@@ -50,6 +54,19 @@ export class ReiExecutor {
       },
       onLineExecute: (line) => {
         this.sendToRenderer('execution-line', line);
+        // ログエントリ送信
+        if (this.logger) {
+          this.logger.logStep(line, 'executing', this.varStore.getAll());
+        }
+        // 変数状態をリアルタイム送信
+        this.sendToRenderer('log:entry', {
+          id: 'line_' + line + '_' + Date.now(),
+          timestamp: new Date().toISOString(),
+          level: 'step',
+          message: 'Line ' + line + ' 実行中',
+          lineNumber: line,
+          variables: this.varStore.getAll(),
+        });
       },
     });
   }
@@ -60,6 +77,9 @@ export class ReiExecutor {
   setWindow(window: BrowserWindow): void {
     this.window = window;
   }
+  setLogger(logger: Logger): void {
+    this.logger = logger;
+  }
 
   /**
    * Reiコードを実行
@@ -68,8 +88,13 @@ export class ReiExecutor {
     console.log('[Rei Executor] Parsing code...');
     console.log('[Rei Executor] Code:', code);
 
+    // 変数処理
+    this.varStore.clear();
+    const processedLines = code.split('\n').map((line) => preprocessLine(line, this.varStore));
+    const processedCode = processedLines.filter((l) => l !== '__SET__' && l !== '__PARAM__').join('\n');
+    if (this.logger) this.logger.startSession('script');
     // パース
-    const program = parse(code);
+    const program = parse(processedCode);
 
     if (program.errors.length > 0) {
       console.log('[Rei Executor] Parse errors:', program.errors);

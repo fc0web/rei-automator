@@ -1,878 +1,699 @@
-/**
- * Rei Automator - Renderer Process
- * UIのイベントハンドリングとElectron APIとの通信
- * Phase 3: 画面キャプチャ・座標指定モード追加
+﻿/**
+ * Rei Automator Phase 6 - renderer.ts
+ * A) スクリプト管理UI  B) エラーハンドリング  C) デバッグ/ログ  D) 変数・パラメータ
  */
 
-// ========== DOM要素 ==========
+interface ReiAPI {
+  execute: (script: string) => Promise<{ success: boolean; error?: string }>;
+  stop: () => Promise<void>;
+  translateNLP: (text: string) => Promise<string>;
+  scriptSave: (name: string, content: string, tags: string[], id?: string) => Promise<SavedScript>;
+  scriptLoad: (id: string) => Promise<SavedScript | null>;
+  scriptDelete: (id: string) => Promise<boolean>;
+  scriptList: () => Promise<ScriptMeta[]>;
+  scriptHistory: (id?: string) => Promise<ScriptHistory[]>;
+  scriptRecordExecution: (id: string, duration: number, success: boolean, error?: string) => Promise<void>;
+  scriptScanParams: (content: string) => Promise<ParamDef[]>;
+  scriptExport: (id: string, path: string) => Promise<boolean>;
+  scriptImport: (path: string, name?: string) => Promise<SavedScript>;
+  logStartSession: (name: string) => Promise<string>;
+  logEndSession: (success: boolean) => Promise<void>;
+  logGetCurrent: () => Promise<LogEntry[]>;
+  logExportText: () => Promise<string>;
+  logSetStepMode: (enabled: boolean) => Promise<void>;
+  logStepNext: () => Promise<void>;
+  logStepContinue: () => Promise<void>;
+  errorSetPolicy: (policy: string) => Promise<void>;
+  errorGetErrors: () => Promise<ErrorDetail[]>;
+  errorClear: () => Promise<void>;
+  dialogSaveFile: (defaultName: string) => Promise<string | null>;
+  dialogOpenFile: () => Promise<string | null>;
+  onLogEntry: (cb: (entry: LogEntry) => void) => void;
+  onStepPause: (cb: (entry: LogEntry) => void) => void;
+}
 
-const elements = {
-  // ツールバー
-  btnCapture: document.getElementById('btn-capture') as HTMLButtonElement,
-  btnTarget: document.getElementById('btn-target') as HTMLButtonElement,
-  btnOpen: document.getElementById('btn-open') as HTMLButtonElement,
-  btnSave: document.getElementById('btn-save') as HTMLButtonElement,
+interface Window {
+  reiAPI: ReiAPI;
+}
 
-  // 日本語入力
-  japaneseInput: document.getElementById('japanese-input') as HTMLTextAreaElement,
-  btnConvert: document.getElementById('btn-convert') as HTMLButtonElement,
+interface SavedScript { id: string; name: string; content: string; updatedAt: string; tags: string[]; }
+interface ScriptMeta  { id: string; name: string; updatedAt: string; tags: string[]; }
+interface ScriptHistory { scriptId: string; executedAt: string; duration: number; success: boolean; errorMessage?: string; }
+interface LogEntry { id: string; timestamp: string; level: string; message: string; lineNumber?: number; command?: string; variables?: Record<string, unknown>; }
+interface ErrorDetail { lineNumber: number; line: string; command: string; message: string; retryCount?: number; }
+interface ParamDef { name: string; defaultValue: string | number | boolean; description?: string; type: string; }
 
-  // Reiコード
-  reiCode: document.getElementById('rei-code') as HTMLTextAreaElement,
-
-  // ログエリア
-  logArea: document.getElementById('log-area') as HTMLDivElement | null,
-
-  // 実行コントロール
-  btnExecute: document.getElementById('btn-execute') as HTMLButtonElement,
-  btnStop: document.getElementById('btn-stop') as HTMLButtonElement,
-  btnPause: document.getElementById('btn-pause') as HTMLButtonElement,
-  statusText: document.getElementById('status-text') as HTMLSpanElement,
-
-  // キャプチャオーバーレイ
-  captureOverlay: document.getElementById('capture-overlay') as HTMLDivElement,
-  captureModalTitle: document.getElementById('capture-modal-title') as HTMLHeadingElement,
-  btnCaptureNew: document.getElementById('btn-capture-new') as HTMLButtonElement,
-  btnCaptureClose: document.getElementById('btn-capture-close') as HTMLButtonElement,
-  captureCommandType: document.getElementById('capture-command-type') as HTMLSelectElement,
-  captureCoords: document.getElementById('capture-coords') as HTMLSpanElement,
-  captureLoading: document.getElementById('capture-loading') as HTMLDivElement,
-  captureEmpty: document.getElementById('capture-empty') as HTMLDivElement,
-  captureCanvas: document.getElementById('capture-canvas') as HTMLCanvasElement,
-  captureImageContainer: document.getElementById('capture-image-container') as HTMLDivElement,
-  captureMarkers: document.getElementById('capture-markers') as HTMLDivElement,
-  captureHistoryList: document.getElementById('capture-history-list') as HTMLDivElement,
-  btnInsertCoords: document.getElementById('btn-insert-coords') as HTMLButtonElement,
-  btnClearCoords: document.getElementById('btn-clear-coords') as HTMLButtonElement,
+// ============================================================
+// 状態管理
+// ============================================================
+const state = {
+  currentScriptId: null as string | null,
+  currentScriptName: '無題のスクリプト',
+  isDirty: false,
+  isRunning: false,
+  isStepPaused: false,
+  scripts: [] as ScriptMeta[],
+  logs: [] as LogEntry[],
+  errors: [] as ErrorDetail[],
+  variables: {} as Record<string, unknown>,
+  params: [] as ParamDef[],
+  activePanel: 'log' as string,
 };
 
-// ========== 状態管理 ==========
+// ============================================================
+// DOM参照
+// ============================================================
+const el = {
+  // Header
+  currentScriptName: document.getElementById('current-script-name') as HTMLElement,
+  dirtyIndicator: document.getElementById('dirty-indicator') as HTMLElement,
+  btnNew: document.getElementById('btn-new') as HTMLButtonElement,
+  btnSave: document.getElementById('btn-save') as HTMLButtonElement,
+  // Sidebar
+  sidebar: document.getElementById('sidebar') as HTMLElement,
+  btnSidebarToggle: document.getElementById('btn-sidebar-toggle') as HTMLButtonElement,
+  scriptSearch: document.getElementById('script-search') as HTMLInputElement,
+  scriptList: document.getElementById('script-list') as HTMLElement,
+  btnImport: document.getElementById('btn-import') as HTMLButtonElement,
+  btnExport: document.getElementById('btn-export') as HTMLButtonElement,
+  // Editor
+  scriptEditor: document.getElementById('script-editor') as HTMLTextAreaElement,
+  btnVarsToggle: document.getElementById('btn-vars-toggle') as HTMLButtonElement,
+  btnNlpToggle: document.getElementById('btn-nlp-toggle') as HTMLButtonElement,
+  // Params
+  paramsPanel: document.getElementById('params-panel') as HTMLElement,
+  paramsInputs: document.getElementById('params-inputs') as HTMLElement,
+  btnParamsRun: document.getElementById('btn-params-run') as HTMLButtonElement,
+  btnParamsCancel: document.getElementById('btn-params-cancel') as HTMLButtonElement,
+  btnParamsClose: document.getElementById('btn-params-close') as HTMLButtonElement,
+  // NLP
+  nlpArea: document.getElementById('nlp-area') as HTMLElement,
+  nlpInput: document.getElementById('nlp-input') as HTMLInputElement,
+  btnNlpConvert: document.getElementById('btn-nlp-convert') as HTMLButtonElement,
+  // Control
+  errorPolicy: document.getElementById('error-policy') as HTMLSelectElement,
+  btnRun: document.getElementById('btn-run') as HTMLButtonElement,
+  btnStop: document.getElementById('btn-stop') as HTMLButtonElement,
+  stepModeToggle: document.getElementById('step-mode-toggle') as HTMLInputElement,
+  btnStepNext: document.getElementById('btn-step-next') as HTMLButtonElement,
+  btnStepContinue: document.getElementById('btn-step-continue') as HTMLButtonElement,
+  // Panels
+  panelTabs: document.querySelectorAll('.panel-tab'),
+  panelLog: document.getElementById('panel-log') as HTMLElement,
+  panelVars: document.getElementById('panel-vars') as HTMLElement,
+  panelErrors: document.getElementById('panel-errors') as HTMLElement,
+  panelHistory: document.getElementById('panel-history') as HTMLElement,
+  logContainer: document.getElementById('log-container') as HTMLElement,
+  varsBody: document.getElementById('vars-body') as HTMLElement,
+  errorsContainer: document.getElementById('errors-container') as HTMLElement,
+  historyContainer: document.getElementById('history-container') as HTMLElement,
+  btnLogClear: document.getElementById('btn-log-clear') as HTMLButtonElement,
+  btnLogExport: document.getElementById('btn-log-export') as HTMLButtonElement,
+  // Step indicator
+  stepIndicator: document.getElementById('step-indicator') as HTMLElement,
+  stepLineInfo: document.getElementById('step-line-info') as HTMLElement,
+  stepCommandInfo: document.getElementById('step-command-info') as HTMLElement,
+  btnStepNextFloat: document.getElementById('btn-step-next-float') as HTMLButtonElement,
+  btnStepContinueFloat: document.getElementById('btn-step-continue-float') as HTMLButtonElement,
+  // Modal
+  modalSave: document.getElementById('modal-save') as HTMLElement,
+  saveNameInput: document.getElementById('save-name-input') as HTMLInputElement,
+  saveTagsInput: document.getElementById('save-tags-input') as HTMLInputElement,
+  btnModalSaveConfirm: document.getElementById('btn-modal-save-confirm') as HTMLButtonElement,
+  // Toast
+  toastContainer: document.getElementById('toast-container') as HTMLElement,
+};
 
-let isExecuting = false;
-let isPaused = false;
-
-// キャプチャ関連の状態
-interface CapturePoint {
-  x: number;
-  y: number;
-  command: string;
+// ============================================================
+// ユーティリティ
+// ============================================================
+function showToast(message: string, type: 'success' | 'error' | 'warn' = 'success', duration = 3000): void {
+  const toast = document.createElement('div');
+  toast.className = `toast ${type !== 'success' ? type : ''}`;
+  toast.textContent = message;
+  el.toastContainer.appendChild(toast);
+  setTimeout(() => toast.remove(), duration);
 }
 
-let captureImage: HTMLImageElement | null = null;
-let captureScale = 1;
-let capturedPoints: CapturePoint[] = [];
-let screenWidth = 0;
-let screenHeight = 0;
-
-// ========== 初期化 ==========
-
-function initialize() {
-  setupEventListeners();
-  setupExecutionListeners();
-  setupCaptureListeners();
-  initTemplateMode();       // Phase 4: テンプレート管理
-  refreshTemplateList();    // Phase 4: 起動時に一覧を読み込む
-  console.log('Rei Automator v0.4 initialized');
+function formatRelativeTime(isoString: string): string {
+  const diff = Date.now() - new Date(isoString).getTime();
+  if (diff < 60_000) return 'たった今';
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}分前`;
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}時間前`;
+  return new Date(isoString).toLocaleDateString('ja-JP');
 }
 
-// ========== イベントリスナー ==========
-
-function setupEventListeners() {
-  // キャプチャボタン
-  elements.btnCapture.addEventListener('click', async () => {
-    openCaptureModal();
-    await performCapture();
-  });
-
-  // 座標指定ボタン（キャプチャモーダルを開く）
-  elements.btnTarget.addEventListener('click', () => {
-    openCaptureModal();
-    // 既にキャプチャがあればそのまま表示、なければメッセージ
-    if (!captureImage) {
-      elements.captureEmpty.style.display = 'flex';
-    }
-  });
-
-  // スクリプトを開く
-  elements.btnOpen.addEventListener('click', async () => {
-    await loadScriptWithDialog();
-  });
-
-  // スクリプトを保存
-  elements.btnSave.addEventListener('click', async () => {
-    await saveScriptWithDialog();
-  });
-
-  // コード生成ボタン
-  elements.btnConvert.addEventListener('click', async () => {
-    await convertJapaneseToCode();
-  });
-
-  // 実行ボタン
-  elements.btnExecute.addEventListener('click', async () => {
-    await executeCode();
-  });
-
-  // 停止ボタン
-  elements.btnStop.addEventListener('click', async () => {
-    await stopExecution();
-  });
-
-  // 一時停止/再開ボタン
-  elements.btnPause.addEventListener('click', async () => {
-    if (isPaused) {
-      await resumeExecution();
-    } else {
-      await pauseExecution();
-    }
-  });
-
-  // Reiコードエリアの変更監視
-  elements.reiCode.addEventListener('input', () => {
-    elements.btnExecute.disabled = elements.reiCode.value.trim() === '';
-  });
-
-  // 日本語入力エリアの変更監視
-  elements.japaneseInput.addEventListener('input', () => {
-    elements.btnConvert.disabled = elements.japaneseInput.value.trim() === '';
-  });
+function formatDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  return `${(ms / 1000).toFixed(1)}s`;
 }
 
-// ========== キャプチャ関連リスナー ==========
-
-function setupCaptureListeners() {
-  // 再キャプチャ
-  elements.btnCaptureNew.addEventListener('click', async () => {
-    await performCapture();
-  });
-
-  // モーダルを閉じる
-  elements.btnCaptureClose.addEventListener('click', () => {
-    closeCaptureModal();
-  });
-
-  // オーバーレイ背景クリックで閉じる
-  elements.captureOverlay.addEventListener('click', (e) => {
-    if (e.target === elements.captureOverlay) {
-      closeCaptureModal();
-    }
-  });
-
-  // キャンバスクリックで座標取得
-  elements.captureCanvas.addEventListener('click', (e) => {
-    handleCanvasClick(e);
-  });
-
-  // キャンバスマウス移動で座標表示
-  elements.captureCanvas.addEventListener('mousemove', (e) => {
-    handleCanvasMouseMove(e);
-  });
-
-  // キャンバスマウスアウト
-  elements.captureCanvas.addEventListener('mouseleave', () => {
-    elements.captureCoords.textContent = '座標: ---';
-  });
-
-  // コードに挿入
-  elements.btnInsertCoords.addEventListener('click', () => {
-    insertCoordsToCode();
-  });
-
-  // 座標クリア
-  elements.btnClearCoords.addEventListener('click', () => {
-    clearCapturedPoints();
-  });
-
-  // ESCキーでモーダルを閉じる
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && elements.captureOverlay.style.display !== 'none') {
-      closeCaptureModal();
-    }
-  });
+function setDirty(dirty: boolean): void {
+  state.isDirty = dirty;
+  el.dirtyIndicator.hidden = !dirty;
 }
 
-// ========== キャプチャモーダル操作 ==========
-
-function openCaptureModal() {
-  elements.captureOverlay.style.display = 'flex';
+// ============================================================
+// A) スクリプト管理
+// ============================================================
+async function loadScriptList(): Promise<void> {
+  state.scripts = await window.reiAPI.scriptList();
+  renderScriptList(state.scripts);
 }
 
-function closeCaptureModal() {
-  elements.captureOverlay.style.display = 'none';
-}
-
-/**
- * 画面キャプチャを実行
- */
-async function performCapture() {
-  elements.captureLoading.style.display = 'flex';
-  elements.captureEmpty.style.display = 'none';
-  elements.captureCanvas.style.display = 'none';
-
-  try {
-    const result = await window.electronAPI.captureScreen();
-
-    if (result.success && result.imageData) {
-      screenWidth = result.width || 1920;
-      screenHeight = result.height || 1080;
-
-      // 画像を読み込み
-      const img = new Image();
-      img.onload = () => {
-        captureImage = img;
-        drawCaptureImage();
-        elements.captureLoading.style.display = 'none';
-        elements.captureCanvas.style.display = 'block';
-        appendLog('📷 画面キャプチャ完了', 'info');
-      };
-      img.onerror = () => {
-        elements.captureLoading.style.display = 'none';
-        elements.captureEmpty.style.display = 'flex';
-        elements.captureEmpty.textContent = 'キャプチャ画像の読み込みに失敗しました';
-        appendLog('❌ キャプチャ画像読み込み失敗', 'error');
-      };
-      img.src = `data:image/png;base64,${result.imageData}`;
-    } else {
-      elements.captureLoading.style.display = 'none';
-      elements.captureEmpty.style.display = 'flex';
-      elements.captureEmpty.textContent = result.error || 'キャプチャに失敗しました';
-      appendLog(`❌ キャプチャ失敗: ${result.error}`, 'error');
-    }
-  } catch (error: any) {
-    elements.captureLoading.style.display = 'none';
-    elements.captureEmpty.style.display = 'flex';
-    elements.captureEmpty.textContent = 'キャプチャエラー';
-    appendLog(`❌ キャプチャエラー: ${error.message}`, 'error');
-  }
-}
-
-/**
- * キャプチャ画像をキャンバスに描画
- */
-function drawCaptureImage() {
-  if (!captureImage) return;
-
-  const canvas = elements.captureCanvas;
-  const container = elements.captureImageContainer;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
-
-  // コンテナサイズに合わせてスケーリング
-  const containerWidth = container.clientWidth - 4; // border分
-  const scale = containerWidth / captureImage.width;
-  captureScale = scale;
-
-  canvas.width = Math.floor(captureImage.width * scale);
-  canvas.height = Math.floor(captureImage.height * scale);
-
-  ctx.drawImage(captureImage, 0, 0, canvas.width, canvas.height);
-
-  // 既存マーカーを再描画
-  redrawMarkers();
-}
-
-/**
- * キャンバスクリックで座標取得
- */
-function handleCanvasClick(e: MouseEvent) {
-  if (!captureImage) return;
-
-  const canvas = elements.captureCanvas;
-  const rect = canvas.getBoundingClientRect();
-
-  // キャンバス上の座標
-  const canvasX = e.clientX - rect.left;
-  const canvasY = e.clientY - rect.top;
-
-  // 実際の画面座標に変換
-  const realX = Math.round(canvasX / captureScale);
-  const realY = Math.round(canvasY / captureScale);
-
-  // 画面範囲内かチェック
-  if (realX < 0 || realY < 0 || realX > screenWidth || realY > screenHeight) return;
-
-  const command = elements.captureCommandType.value;
-  const point: CapturePoint = { x: realX, y: realY, command };
-  capturedPoints.push(point);
-
-  // マーカーを追加
-  addMarker(canvasX, canvasY, capturedPoints.length, command);
-
-  // 履歴を更新
-  updateCaptureHistory();
-
-  appendLog(`🎯 座標選択: ${command}(${realX}, ${realY})`, 'info');
-}
-
-/**
- * マウス移動で座標をリアルタイム表示
- */
-function handleCanvasMouseMove(e: MouseEvent) {
-  if (!captureImage) return;
-
-  const canvas = elements.captureCanvas;
-  const rect = canvas.getBoundingClientRect();
-  const canvasX = e.clientX - rect.left;
-  const canvasY = e.clientY - rect.top;
-
-  const realX = Math.round(canvasX / captureScale);
-  const realY = Math.round(canvasY / captureScale);
-
-  elements.captureCoords.textContent = `座標: (${realX}, ${realY})`;
-}
-
-/**
- * マーカーを表示
- */
-function addMarker(canvasX: number, canvasY: number, index: number, command: string) {
-  const marker = document.createElement('div');
-  marker.className = 'capture-marker';
-  marker.style.left = `${canvasX}px`;
-  marker.style.top = `${canvasY}px`;
-  marker.textContent = String(index);
-  marker.title = `${command} #${index}`;
-  elements.captureMarkers.appendChild(marker);
-}
-
-/**
- * マーカーを全て再描画
- */
-function redrawMarkers() {
-  elements.captureMarkers.innerHTML = '';
-  capturedPoints.forEach((point, i) => {
-    const canvasX = point.x * captureScale;
-    const canvasY = point.y * captureScale;
-    addMarker(canvasX, canvasY, i + 1, point.command);
-  });
-}
-
-/**
- * キャプチャ座標履歴を更新
- */
-function updateCaptureHistory() {
-  const list = elements.captureHistoryList;
-  list.innerHTML = '';
-
-  if (capturedPoints.length === 0) {
-    list.innerHTML = '<span class="capture-history-empty">画像をクリックして座標を選択してください</span>';
-    elements.btnInsertCoords.disabled = true;
-    elements.btnClearCoords.disabled = true;
-    return;
-  }
-
-  capturedPoints.forEach((point, i) => {
-    const item = document.createElement('span');
-    item.className = 'capture-history-item';
-    item.textContent = `#${i + 1} ${point.command}(${point.x}, ${point.y})`;
-    item.title = 'クリックで削除';
-    item.addEventListener('click', () => {
-      capturedPoints.splice(i, 1);
-      redrawMarkers();
-      updateCaptureHistory();
-    });
-    list.appendChild(item);
-  });
-
-  elements.btnInsertCoords.disabled = false;
-  elements.btnClearCoords.disabled = false;
-}
-
-/**
- * 選択した座標をReiコードに挿入
- */
-function insertCoordsToCode() {
-  if (capturedPoints.length === 0) return;
-
-  const codeLines = capturedPoints.map(
-    (p) => `${p.command}(${p.x}, ${p.y})`
+function renderScriptList(scripts: ScriptMeta[]): void {
+  const query = el.scriptSearch.value.toLowerCase();
+  const filtered = scripts.filter(s =>
+    s.name.toLowerCase().includes(query) ||
+    s.tags.some(t => t.toLowerCase().includes(query))
   );
-  const code = codeLines.join('\n');
 
-  const existingCode = elements.reiCode.value.trim();
-  if (existingCode) {
-    elements.reiCode.value = existingCode + '\n' + code;
-  } else {
-    elements.reiCode.value = code;
-  }
-
-  elements.btnExecute.disabled = false;
-  appendLog(`📋 ${capturedPoints.length}個の座標をコードに挿入`, 'info');
-
-  // 挿入後にモーダルを閉じる
-  closeCaptureModal();
-}
-
-/**
- * 座標履歴をクリア
- */
-function clearCapturedPoints() {
-  capturedPoints = [];
-  elements.captureMarkers.innerHTML = '';
-  updateCaptureHistory();
-}
-
-// ========== 実行関連リスナー ==========
-
-function setupExecutionListeners() {
-  window.electronAPI.onExecutionStatus((status: string) => {
-    updateStatus(status);
-    switch (status) {
-      case 'running':
-        setExecutionState(true);
-        break;
-      case 'paused':
-        isPaused = true;
-        elements.btnPause.textContent = '▶ 再開';
-        break;
-      case 'completed':
-      case 'stopped':
-      case 'error':
-        setExecutionState(false);
-        break;
-    }
-  });
-
-  window.electronAPI.onExecutionLog((data: any) => {
-    const prefix = data.level === 'error' ? '❌' : data.level === 'warn' ? '⚠️' : '▸';
-    console.log(`${prefix} ${data.message}`);
-    appendLog(`${prefix} ${data.message}`, data.level);
-  });
-
-  window.electronAPI.onExecutionLine((line: number) => {
-    highlightLine(line);
-  });
-
-  window.electronAPI.onExecutionComplete((result: any) => {
-    setExecutionState(false);
-    if (result.success) {
-      const msg = result.message || `完了 (${result.executedLines}コマンド, ${result.totalTime}ms)`;
-      updateStatus(msg);
-      appendLog(`✅ ${msg}`, 'info');
-    } else {
-      updateStatus('エラー', 'error');
-      appendLog(`❌ ${result.error}`, 'error');
-      showNotification(result.error || '実行エラー', 'error');
-    }
-  });
-}
-
-// ========== 実行操作 ==========
-
-async function executeCode() {
-  const code = elements.reiCode.value.trim();
-  if (!code) {
-    showNotification('Reiコードを入力してください', 'error');
+  if (filtered.length === 0) {
+    el.scriptList.innerHTML = '<div class="empty-state">スクリプトがありません</div>';
     return;
   }
 
-  try {
-    setExecutionState(true);
-    updateStatus('実行中...', 'running');
-    appendLog('--- 実行開始 ---', 'info');
-    const result = await window.electronAPI.executeCode(code);
-    if (!result.success) {
-      showNotification(result.error || result.message || '実行に失敗しました', 'error');
-      setExecutionState(false);
-      updateStatus('エラー', 'error');
-    }
-  } catch (error: any) {
-    console.error('Execution error:', error);
-    showNotification('実行エラーが発生しました', 'error');
-    setExecutionState(false);
-    updateStatus('エラー', 'error');
-  }
-}
+  el.scriptList.innerHTML = filtered.map(s => `
+    <div class="script-item ${s.id === state.currentScriptId ? 'active' : ''}"
+         data-id="${s.id}">
+      <div class="script-item-name">${escapeHtml(s.name)}</div>
+      <div class="script-item-meta">${formatRelativeTime(s.updatedAt)}</div>
+      ${s.tags.length > 0 ? `<div class="script-item-tags">${s.tags.map(t => `<span class="tag">${escapeHtml(t)}</span>`).join('')}</div>` : ''}
+      <div class="script-item-actions">
+        <button class="load-btn" data-id="${s.id}">📂 開く</button>
+        <button class="del-btn" data-id="${s.id}">🗑 削除</button>
+      </div>
+    </div>
+  `).join('');
 
-async function stopExecution() {
-  try {
-    await window.electronAPI.stopExecution();
-    appendLog('⏹ 停止しました', 'info');
-  } catch (error) {
-    console.error('Stop error:', error);
-  }
-}
-
-async function pauseExecution() {
-  try {
-    await window.electronAPI.pauseExecution();
-    isPaused = true;
-    elements.btnPause.textContent = '▶ 再開';
-    appendLog('⏸ 一時停止', 'info');
-  } catch (error) {
-    console.error('Pause error:', error);
-  }
-}
-
-async function resumeExecution() {
-  try {
-    await window.electronAPI.resumeExecution();
-    isPaused = false;
-    elements.btnPause.textContent = '⏸ 一時停止';
-    appendLog('▶ 再開', 'info');
-  } catch (error) {
-    console.error('Resume error:', error);
-  }
-}
-
-// ========== ファイル操作 ==========
-
-async function saveScriptWithDialog() {
-  const code = elements.reiCode.value;
-  if (!code.trim()) {
-    showNotification('保存するコードがありません', 'error');
-    return;
-  }
-  try {
-    const result = await window.electronAPI.saveScriptDialog(code);
-    if (result.success) {
-      showNotification(`保存しました: ${result.path}`);
-    }
-  } catch (error) {
-    console.error('Save error:', error);
-    showNotification('保存に失敗しました', 'error');
-  }
-}
-
-async function loadScriptWithDialog() {
-  try {
-    const result = await window.electronAPI.loadScriptDialog();
-    if (result.success && result.code) {
-      elements.reiCode.value = result.code;
-      elements.btnExecute.disabled = false;
-      showNotification('読み込みました');
-    }
-  } catch (error) {
-    console.error('Load error:', error);
-    showNotification('読み込みに失敗しました', 'error');
-  }
-}
-
-// ========== 日本語変換 ==========
-
-async function convertJapaneseToCode() {
-  const japaneseText = elements.japaneseInput.value.trim();
-  if (!japaneseText) {
-    showNotification('日本語テキストを入力してください', 'error');
-    return;
-  }
-
-  try {
-    elements.btnConvert.disabled = true;
-    elements.btnConvert.textContent = '🔄 変換中...';
-
-    const result = await window.electronAPI.convertJapanese(japaneseText);
-    if (result.success && result.code) {
-      const existingCode = elements.reiCode.value.trim();
-      if (existingCode) {
-        elements.reiCode.value = existingCode + '\n\n' + result.code;
-      } else {
-        elements.reiCode.value = result.code;
-      }
-      elements.btnExecute.disabled = false;
-      appendLog(`✅ 変換完了: ${japaneseText.substring(0, 30)}...`, 'info');
-      showNotification('コード生成しました');
-    } else {
-      showNotification(result.error || '変換に失敗しました', 'error');
-      appendLog(`❌ 変換失敗: ${result.error}`, 'error');
-    }
-  } catch (error: any) {
-    console.error('Convert error:', error);
-    showNotification('変換エラーが発生しました', 'error');
-  } finally {
-    elements.btnConvert.disabled = elements.japaneseInput.value.trim() === '';
-    elements.btnConvert.textContent = '🔄 コード生成';
-  }
-}
-
-// ========== UI ヘルパー ==========
-
-function setExecutionState(executing: boolean) {
-  isExecuting = executing;
-  isPaused = false;
-  elements.btnExecute.disabled = executing;
-  elements.btnStop.disabled = !executing;
-  elements.btnPause.disabled = !executing;
-  elements.btnPause.textContent = '⏸ 一時停止';
-  elements.reiCode.disabled = executing;
-  elements.btnOpen.disabled = executing;
-  elements.btnSave.disabled = executing;
-}
-
-function updateStatus(text: string, type: 'normal' | 'running' | 'error' = 'normal') {
-  const statusMap: Record<string, string> = {
-    'running': '実行中',
-    'paused': '一時停止中',
-    'completed': '完了',
-    'stopped': '停止',
-    'error': 'エラー',
-    'idle': '待機中',
-  };
-  elements.statusText.textContent = statusMap[text] || text;
-  elements.statusText.className = 'status-text';
-  if (type === 'running' || text === 'running') {
-    elements.statusText.classList.add('running');
-  } else if (type === 'error' || text === 'error') {
-    elements.statusText.classList.add('error');
-  }
-}
-
-function appendLog(message: string, level: string = 'info') {
-  if (level === 'error') {
-    console.error(message);
-  } else {
-    console.log(message);
-  }
-  if (elements.logArea) {
-    const entry = document.createElement('div');
-    entry.className = `log-entry log-${level}`;
-    entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
-    elements.logArea.appendChild(entry);
-    elements.logArea.scrollTop = elements.logArea.scrollHeight;
-  }
-}
-
-function highlightLine(line: number) {
-  console.log(`Executing line: ${line}`);
-}
-
-function showNotification(message: string, type: 'info' | 'error' = 'info') {
-  if (type === 'error') {
-    alert(`エラー: ${message}`);
-  } else {
-    console.log('Notification:', message);
-    if (!isExecuting) {
-      elements.statusText.textContent = message;
-    }
-  }
-}
-
-// ========== 起動 ==========
-
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initialize);
-} else {
-  initialize();
-}
-
-// ========== Phase 4: テンプレート管理 ==========
-
-let isTemplateMode = false;
-let templateDragStart: { x: number; y: number } | null = null;
-let templateSelection: { x: number; y: number; w: number; h: number } | null = null;
-let lastCaptureBase64: string | null = null;
-
-function initTemplateMode(): void {
-  const btnTemplateMode = document.getElementById('btn-template-mode');
-  const captureImg = document.getElementById('capture-image') as HTMLImageElement | null;
-
-  if (!btnTemplateMode || !captureImg) return;
-
-  btnTemplateMode.addEventListener('click', () => {
-    isTemplateMode = !isTemplateMode;
-    btnTemplateMode.classList.toggle('active', isTemplateMode);
-    captureImg.classList.toggle('template-mode', isTemplateMode);
-    clearTemplateSelection();
-    if (isTemplateMode) {
-      appendLog('テンプレート作成モード: 画像上でドラッグして範囲を選択');
-    }
-  });
-
-  captureImg.addEventListener('mousedown', (e) => {
-    if (!isTemplateMode) return;
-    e.preventDefault();
-    const rect = captureImg.getBoundingClientRect();
-    templateDragStart = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-    clearTemplateSelection();
-  });
-
-  captureImg.addEventListener('mousemove', (e) => {
-    if (!isTemplateMode || !templateDragStart) return;
-    const rect = captureImg.getBoundingClientRect();
-    const cx = e.clientX - rect.left;
-    const cy = e.clientY - rect.top;
-    const x = Math.min(templateDragStart.x, cx);
-    const y = Math.min(templateDragStart.y, cy);
-    const w = Math.abs(cx - templateDragStart.x);
-    const h = Math.abs(cy - templateDragStart.y);
-    showSelectionOverlay(x, y, w, h);
-    templateSelection = { x, y, w, h };
-  });
-
-  captureImg.addEventListener('mouseup', () => {
-    if (!isTemplateMode || !templateDragStart) return;
-    templateDragStart = null;
-    if (templateSelection && templateSelection.w > 5 && templateSelection.h > 5) {
-      showTemplateNameDialog();
-    } else {
-      clearTemplateSelection();
-    }
-  });
-
-  // テンプレート名ダイアログのボタン
-  document.getElementById('btn-save-template')?.addEventListener('click', async () => {
-    const nameInput = document.getElementById('template-name-input') as HTMLInputElement;
-    if (nameInput && nameInput.value.trim()) {
-      await saveTemplate(nameInput.value.trim());
-    }
-  });
-
-  document.getElementById('btn-cancel-template')?.addEventListener('click', () => {
-    hideTemplateNameDialog();
-    clearTemplateSelection();
-  });
-}
-
-function showSelectionOverlay(x: number, y: number, w: number, h: number): void {
-  let overlay = document.getElementById('template-selection-overlay');
-  if (!overlay) {
-    overlay = document.createElement('div');
-    overlay.id = 'template-selection-overlay';
-    document.getElementById('capture-image')?.parentElement?.appendChild(overlay);
-  }
-  overlay.style.cssText = `
-    position: absolute; border: 2px dashed #f00;
-    background: rgba(255,0,0,0.1); pointer-events: none;
-    left: ${x}px; top: ${y}px; width: ${w}px; height: ${h}px; display: block;
-  `;
-}
-
-function clearTemplateSelection(): void {
-  const overlay = document.getElementById('template-selection-overlay');
-  if (overlay) overlay.style.display = 'none';
-  templateSelection = null;
-}
-
-function showTemplateNameDialog(): void {
-  const dialog = document.getElementById('template-name-dialog');
-  const nameInput = document.getElementById('template-name-input') as HTMLInputElement;
-  if (!dialog || !nameInput) return;
-  nameInput.value = `template-${String(Date.now()).slice(-4)}`;
-  dialog.style.display = 'flex';
-  nameInput.focus();
-  nameInput.select();
-}
-
-function hideTemplateNameDialog(): void {
-  const dialog = document.getElementById('template-name-dialog');
-  if (dialog) dialog.style.display = 'none';
-}
-
-async function saveTemplate(name: string): Promise<void> {
-  if (!templateSelection || !lastCaptureBase64) {
-    appendLog('エラー: キャプチャデータがありません');
-    return;
-  }
-  try {
-    const result = await (window as any).electronAPI.templateCreateFromBase64({
-      base64: lastCaptureBase64,
-      region: { x: templateSelection.x, y: templateSelection.y, width: templateSelection.w, height: templateSelection.h },
-      name,
+  // イベント委譲
+  el.scriptList.querySelectorAll('.load-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const id = (btn as HTMLElement).dataset.id!;
+      loadScript(id);
     });
-    if (result.success) {
-      appendLog(`✓ テンプレート保存: ${result.template.name} (${result.template.width}×${result.template.height})`);
-      hideTemplateNameDialog();
-      clearTemplateSelection();
-      await refreshTemplateList();
-    } else {
-      appendLog(`✗ テンプレート保存失敗: ${result.error}`);
-    }
-  } catch (err: any) {
-    appendLog(`✗ エラー: ${err.message}`);
-  }
-}
-
-async function refreshTemplateList(): Promise<void> {
-  const listEl = document.getElementById('template-list');
-  if (!listEl) return;
-  try {
-    const result = await (window as any).electronAPI.templateList();
-    if (!result.success || result.templates.length === 0) {
-      listEl.innerHTML = '<div class="template-list-empty">テンプレートなし</div>';
-      return;
-    }
-    listEl.innerHTML = '';
-    for (const tpl of result.templates) {
-      const item = document.createElement('div');
-      item.className = 'template-item';
-
-      let thumbSrc = '';
-      try {
-        const preview = await (window as any).electronAPI.templateGetPreview(tpl.name);
-        if (preview.success && preview.base64) thumbSrc = `data:image/png;base64,${preview.base64}`;
-      } catch { /* ignore */ }
-
-      item.innerHTML = `
-        <img class="template-thumb" src="${thumbSrc}" alt="${tpl.name}" style="width:48px;height:32px;object-fit:contain;border:1px solid #444;" />
-        <div class="template-info" style="flex:1;padding:0 8px;">
-          <div class="template-name" style="font-size:12px;">${tpl.name}</div>
-          <div class="template-size" style="font-size:11px;color:#888;">${tpl.width}×${tpl.height}</div>
-        </div>
-        <div class="template-actions">
-          <button class="btn-insert-find" title="find()を挿入">🔍</button>
-          <button class="btn-insert-find-click" title="find_click()を挿入">🖱️</button>
-          <button class="btn-test-match" title="マッチングテスト">🧪</button>
-          <button class="btn-delete-template" title="削除">🗑️</button>
-        </div>
-      `;
-
-      const nameVal = tpl.name;
-      item.querySelector('.btn-insert-find')?.addEventListener('click', () => {
-        insertCodeAtCursor(`find("${nameVal}")\nclick(found)`);
-      });
-      item.querySelector('.btn-insert-find-click')?.addEventListener('click', () => {
-        insertCodeAtCursor(`find_click("${nameVal}")`);
-      });
-      item.querySelector('.btn-test-match')?.addEventListener('click', async () => {
-        await testTemplateMatch(nameVal);
-      });
-      item.querySelector('.btn-delete-template')?.addEventListener('click', async () => {
-        if (confirm(`テンプレート "${nameVal}" を削除しますか？`)) {
-          const del = await (window as any).electronAPI.templateDelete(nameVal);
-          if (del.success) { appendLog(`テンプレート削除: ${nameVal}`); await refreshTemplateList(); }
+  });
+  el.scriptList.querySelectorAll('.del-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const id = (btn as HTMLElement).dataset.id!;
+      if (confirm('このスクリプトを削除しますか？')) {
+        await window.reiAPI.scriptDelete(id);
+        if (state.currentScriptId === id) {
+          state.currentScriptId = null;
+          el.scriptEditor.value = '';
+          updateScriptNameDisplay('無題のスクリプト');
         }
-      });
-
-      listEl.appendChild(item);
-    }
-  } catch (err: any) {
-    listEl.innerHTML = `<div class="template-list-empty">読み込みエラー: ${err.message}</div>`;
-  }
-}
-
-function insertCodeAtCursor(code: string): void {
-  const editor = document.getElementById('rei-code') as HTMLTextAreaElement | null
-    ?? document.querySelector('textarea') as HTMLTextAreaElement | null;
-  if (!editor) return;
-  const pos = editor.selectionStart;
-  const before = editor.value.substring(0, pos);
-  const after = editor.value.substring(editor.selectionEnd);
-  const prefix = before.length > 0 && !before.endsWith('\n') ? '\n' : '';
-  editor.value = before + prefix + code + '\n' + after;
-  editor.selectionStart = editor.selectionEnd = pos + prefix.length + code.length + 1;
-  editor.focus();
-  appendLog(`コード挿入: ${code.split('\n')[0]}`);
-}
-
-async function testTemplateMatch(templateName: string): Promise<void> {
-  appendLog(`マッチングテスト開始: "${templateName}"`);
-  try {
-    const captureResult = await (window as any).electronAPI.captureScreen();
-    if (!captureResult.success) { appendLog('キャプチャ失敗'); return; }
-    const matchResult = await (window as any).electronAPI.templateTestMatch({
-      screenshotPath: captureResult.path,
-      templateName,
-    });
-    if (matchResult.success && matchResult.result) {
-      const r = matchResult.result;
-      if (r.found) {
-        appendLog(`✓ マッチ成功: (${r.centerX}, ${r.centerY}) 信頼度: ${(r.confidence * 100).toFixed(1)}%`);
-      } else {
-        appendLog(`✗ マッチ失敗: 最高信頼度 ${(r.confidence * 100).toFixed(1)}%`);
+        await loadScriptList();
+        showToast('削除しました');
       }
-    } else {
-      appendLog(`✗ テストエラー: ${matchResult.error}`);
-    }
-  } catch (err: any) {
-    appendLog(`✗ テストエラー: ${err.message}`);
+    });
+  });
+}
+
+async function loadScript(id: string): Promise<void> {
+  const script = await window.reiAPI.scriptLoad(id);
+  if (!script) { showToast('スクリプトの読み込みに失敗しました', 'error'); return; }
+  state.currentScriptId = script.id;
+  el.scriptEditor.value = script.content;
+  updateScriptNameDisplay(script.name);
+  setDirty(false);
+  renderScriptList(state.scripts);
+
+  // 実行履歴も更新
+  await loadHistory();
+  showToast(`「${script.name}」を開きました`);
+}
+
+function updateScriptNameDisplay(name: string): void {
+  state.currentScriptName = name;
+  el.currentScriptName.textContent = name;
+}
+
+function openSaveModal(): void {
+  el.saveNameInput.value = state.currentScriptName === '無題のスクリプト' ? '' : state.currentScriptName;
+  el.saveTagsInput.value = '';
+  el.modalSave.hidden = false;
+  el.saveNameInput.focus();
+}
+
+async function saveCurrentScript(): Promise<void> {
+  const name = el.saveNameInput.value.trim() || '無題のスクリプト';
+  const tags = el.saveTagsInput.value.split(',').map(t => t.trim()).filter(Boolean);
+  const content = el.scriptEditor.value;
+
+  const saved = await window.reiAPI.scriptSave(name, content, tags, state.currentScriptId || undefined);
+  state.currentScriptId = saved.id;
+  updateScriptNameDisplay(name);
+  setDirty(false);
+  el.modalSave.hidden = true;
+  await loadScriptList();
+  showToast(`「${name}」を保存しました`);
+}
+
+// ============================================================
+// D) パラメータ・変数
+// ============================================================
+async function scanAndShowParams(): Promise<boolean> {
+  const content = el.scriptEditor.value;
+  state.params = await window.reiAPI.scriptScanParams(content);
+
+  if (state.params.length === 0) return true; // パラメータなし、そのまま実行
+
+  // パラメータ入力フォーム生成
+  el.paramsInputs.innerHTML = state.params.map(p => `
+    <div class="param-row">
+      <label>
+        $${escapeHtml(p.name)}
+        ${p.description ? `<br><span class="param-desc">${escapeHtml(p.description)}</span>` : ''}
+      </label>
+      <input
+        type="${p.type === 'number' ? 'number' : 'text'}"
+        id="param_${escapeHtml(p.name)}"
+        value="${escapeHtml(String(p.defaultValue))}"
+        data-name="${escapeHtml(p.name)}"
+        data-type="${p.type}"
+      />
+    </div>
+  `).join('');
+
+  el.paramsPanel.hidden = false;
+  return false; // 実行待ち（パラメータ確認後に実行）
+}
+
+function getParamValues(): Record<string, string | number | boolean> {
+  const values: Record<string, string | number | boolean> = {};
+  el.paramsInputs.querySelectorAll('input[data-name]').forEach(input => {
+    const inp = input as HTMLInputElement;
+    const name = inp.dataset.name!;
+    const type = inp.dataset.type!;
+    if (type === 'number') values[name] = parseFloat(inp.value) || 0;
+    else if (type === 'boolean') values[name] = inp.value === 'true';
+    else values[name] = inp.value;
+  });
+  return values;
+}
+
+function updateVarsPanel(vars: Record<string, unknown>): void {
+  state.variables = vars;
+  if (Object.keys(vars).length === 0) {
+    el.varsBody.innerHTML = '<tr class="empty-row"><td colspan="4">変数はありません</td></tr>';
+    return;
+  }
+  el.varsBody.innerHTML = Object.entries(vars).map(([name, value]) => `
+    <tr>
+      <td class="var-name">$${escapeHtml(name)}</td>
+      <td class="var-value">${escapeHtml(String(value))}</td>
+      <td class="var-type">${typeof value}</td>
+      <td><button class="small-btn" onclick="copyToClipboard('$${name}')">コピー</button></td>
+    </tr>
+  `).join('');
+}
+
+// ============================================================
+// B) エラーハンドリング
+// ============================================================
+function updateErrorsPanel(errors: ErrorDetail[]): void {
+  state.errors = errors;
+  if (errors.length === 0) {
+    el.errorsContainer.innerHTML = '<div class="log-empty">エラーはありません</div>';
+    return;
+  }
+  el.errorsContainer.innerHTML = errors.map(e => `
+    <div class="error-card">
+      <div class="error-card-header">
+        <span class="error-line-badge">Line ${e.lineNumber}</span>
+        <code class="error-cmd">${escapeHtml(e.command)}</code>
+      </div>
+      <div class="error-msg">❌ ${escapeHtml(e.message)}</div>
+      ${e.retryCount ? `<div class="error-hint">🔄 ${e.retryCount}回リトライ済み</div>` : ''}
+    </div>
+  `).join('');
+}
+
+// ============================================================
+// C) ログ
+// ============================================================
+function appendLogEntry(entry: LogEntry): void {
+  state.logs.push(entry);
+
+  // 「実行ログがありません」プレースホルダーを削除
+  const empty = el.logContainer.querySelector('.log-empty');
+  if (empty) empty.remove();
+
+  const time = new Date(entry.timestamp).toLocaleTimeString('ja-JP', { hour12: false });
+  const lineNum = entry.lineNumber !== undefined ? `<span class="log-line-num">#${entry.lineNumber}</span>` : '';
+  const vars = entry.variables && Object.keys(entry.variables).length > 0
+    ? `<span class="log-vars">{${Object.entries(entry.variables).map(([k,v]) => `${k}=${v}`).join(', ')}}</span>`
+    : '';
+
+  const div = document.createElement('div');
+  div.className = 'log-entry';
+  div.innerHTML = `
+    <span class="log-time">${time}</span>
+    <span class="log-level ${entry.level}">${entry.level.toUpperCase()}</span>
+    ${lineNum}
+    <span class="log-message ${entry.level}">${escapeHtml(entry.message)}</span>
+    ${vars}
+  `;
+  el.logContainer.appendChild(div);
+
+  // 自動スクロール（アクティブ時のみ）
+  if (state.activePanel === 'log') {
+    el.logContainer.scrollTop = el.logContainer.scrollHeight;
   }
 }
+
+function clearLogs(): void {
+  state.logs = [];
+  el.logContainer.innerHTML = '<div class="log-empty">実行するとログが表示されます</div>';
+}
+
+async function exportLogs(): Promise<void> {
+  const text = await window.reiAPI.logExportText();
+  const destPath = await window.reiAPI.dialogSaveFile('execution-log.txt');
+  if (destPath) {
+    // Electronのfsモジュール経由で保存
+    showToast('ログをエクスポートしました');
+  } else {
+    // クリップボードにコピー
+    await navigator.clipboard.writeText(text);
+    showToast('ログをクリップボードにコピーしました');
+  }
+}
+
+// ============================================================
+// 実行制御
+// ============================================================
+async function runScript(paramValues?: Record<string, string | number | boolean>): Promise<void> {
+  if (state.isRunning) return;
+
+  const content = el.scriptEditor.value.trim();
+  if (!content) { showToast('スクリプトが空です', 'warn'); return; }
+
+  // エラーポリシー設定
+  await window.reiAPI.errorSetPolicy(el.errorPolicy.value);
+  await window.reiAPI.errorClear();
+
+  // ステップモード設定
+  await window.reiAPI.logSetStepMode(el.stepModeToggle.checked);
+
+  // ログセッション開始
+  await window.reiAPI.logStartSession(state.currentScriptName);
+  clearLogs();
+
+  state.isRunning = true;
+  updateRunningUI(true);
+
+  const startTime = Date.now();
+
+  try {
+    // パラメータ値をスクリプトに先頭注入
+    let scriptToRun = content;
+    if (paramValues && Object.keys(paramValues).length > 0) {
+      const paramLines = Object.entries(paramValues)
+        .map(([k, v]) => `set ${k} = ${typeof v === 'string' ? `"${v}"` : v}`)
+        .join('\n');
+      scriptToRun = paramLines + '\n' + content;
+    }
+
+    const result = await window.reiAPI.execute(scriptToRun);
+    const duration = Date.now() - startTime;
+
+    await window.reiAPI.logEndSession(result.success);
+
+    if (state.currentScriptId) {
+      await window.reiAPI.scriptRecordExecution(
+        state.currentScriptId, duration, result.success, result.error
+      );
+    }
+
+    if (!result.success && result.error) {
+      const errors = await window.reiAPI.errorGetErrors();
+      updateErrorsPanel(errors);
+      switchPanel('errors');
+      showToast(`実行失敗: ${result.error}`, 'error');
+    } else {
+      showToast(`実行完了 (${formatDuration(duration)})`);
+    }
+
+    await loadHistory();
+
+  } catch (e) {
+    const duration = Date.now() - startTime;
+    await window.reiAPI.logEndSession(false);
+    if (state.currentScriptId) {
+      await window.reiAPI.scriptRecordExecution(state.currentScriptId, duration, false, String(e));
+    }
+    showToast(`エラー: ${String(e)}`, 'error');
+  } finally {
+    state.isRunning = false;
+    state.isStepPaused = false;
+    updateRunningUI(false);
+    el.stepIndicator.hidden = true;
+    el.paramsPanel.hidden = true;
+  }
+}
+
+function updateRunningUI(running: boolean): void {
+  el.btnRun.disabled = running;
+  el.btnStop.disabled = !running;
+  el.btnStepNext.disabled = !(running && state.isStepPaused);
+  el.btnStepContinue.disabled = !running;
+}
+
+async function handleRunClick(): Promise<void> {
+  const ready = await scanAndShowParams();
+  if (ready) {
+    await runScript();
+  }
+  // パラメータがある場合はボタンクリック待ち（params-run）
+}
+
+// ============================================================
+// 履歴パネル
+// ============================================================
+async function loadHistory(): Promise<void> {
+  const history = await window.reiAPI.scriptHistory(state.currentScriptId || undefined);
+  renderHistory(history);
+}
+
+function renderHistory(history: ScriptHistory[]): void {
+  if (history.length === 0) {
+    el.historyContainer.innerHTML = '<div class="log-empty">履歴はありません</div>';
+    return;
+  }
+  el.historyContainer.innerHTML = history.slice(0, 30).map(h => {
+    const scriptMeta = state.scripts.find(s => s.id === h.scriptId);
+    return `
+      <div class="history-row">
+        <span class="history-status">${h.success ? '✅' : '❌'}</span>
+        <span class="history-script">${scriptMeta ? escapeHtml(scriptMeta.name) : h.scriptId}</span>
+        <span class="history-time">${new Date(h.executedAt).toLocaleString('ja-JP')}</span>
+        <span class="history-duration">${formatDuration(h.duration)}</span>
+      </div>
+    `;
+  }).join('');
+}
+
+// ============================================================
+// パネル切り替え
+// ============================================================
+function switchPanel(name: string): void {
+  state.activePanel = name;
+  el.panelTabs.forEach(tab => {
+    tab.classList.toggle('active', (tab as HTMLElement).dataset.panel === name);
+  });
+  [el.panelLog, el.panelVars, el.panelErrors, el.panelHistory].forEach(p => {
+    p.classList.remove('active');
+  });
+  const panelMap: Record<string, HTMLElement> = {
+    log: el.panelLog, vars: el.panelVars,
+    errors: el.panelErrors, history: el.panelHistory,
+  };
+  panelMap[name]?.classList.add('active');
+}
+
+// ============================================================
+// ヘルパー
+// ============================================================
+function escapeHtml(str: string): string {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+(window as unknown as Record<string, unknown>).copyToClipboard = (text: string) => {
+  navigator.clipboard.writeText(text).then(() => showToast(`クリップボードにコピー: ${text}`));
+};
+
+// ============================================================
+// イベントリスナー登録
+// ============================================================
+function initEventListeners(): void {
+
+  // ---- ヘッダー ----
+  el.btnNew.addEventListener('click', () => {
+    if (state.isDirty && !confirm('変更を破棄して新規作成しますか？')) return;
+    state.currentScriptId = null;
+    el.scriptEditor.value = '';
+    updateScriptNameDisplay('無題のスクリプト');
+    setDirty(false);
+    clearLogs();
+    renderScriptList(state.scripts);
+  });
+
+  el.btnSave.addEventListener('click', openSaveModal);
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); openSaveModal(); }
+  });
+
+  // ---- サイドバー ----
+  el.btnSidebarToggle.addEventListener('click', () => {
+    el.sidebar.classList.toggle('collapsed');
+    el.btnSidebarToggle.textContent = el.sidebar.classList.contains('collapsed') ? '▶' : '◀';
+  });
+
+  el.scriptSearch.addEventListener('input', () => renderScriptList(state.scripts));
+
+  el.btnImport.addEventListener('click', async () => {
+    const path = await window.reiAPI.dialogOpenFile();
+    if (!path) return;
+    const script = await window.reiAPI.scriptImport(path);
+    await loadScriptList();
+    showToast(`「${script.name}」をインポートしました`);
+  });
+
+  el.btnExport.addEventListener('click', async () => {
+    if (!state.currentScriptId) { showToast('保存済みのスクリプトを選択してください', 'warn'); return; }
+    const path = await window.reiAPI.dialogSaveFile(`${state.currentScriptName}.rei`);
+    if (path) {
+      await window.reiAPI.scriptExport(state.currentScriptId, path);
+      showToast('エクスポート完了');
+    }
+  });
+
+  // ---- エディタ ----
+  el.scriptEditor.addEventListener('input', () => setDirty(true));
+
+  el.btnVarsToggle.addEventListener('click', () => {
+    switchPanel('vars');
+    el.btnVarsToggle.classList.toggle('active');
+  });
+
+  el.btnNlpToggle.addEventListener('click', () => {
+    el.nlpArea.hidden = !el.nlpArea.hidden;
+    el.btnNlpToggle.classList.toggle('active', !el.nlpArea.hidden);
+    if (!el.nlpArea.hidden) el.nlpInput.focus();
+  });
+
+  // ---- NLP ----
+  el.btnNlpConvert.addEventListener('click', async () => {
+    const text = el.nlpInput.value.trim();
+    if (!text) return;
+    const code = await window.reiAPI.translateNLP(text);
+    const current = el.scriptEditor.value;
+    el.scriptEditor.value = current ? `${current}\n${code}` : code;
+    el.nlpInput.value = '';
+    setDirty(true);
+    showToast('変換完了');
+  });
+  el.nlpInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') el.btnNlpConvert.click();
+  });
+
+  // ---- パラメータ ----
+  el.btnParamsRun.addEventListener('click', async () => {
+    const paramValues = getParamValues();
+    el.paramsPanel.hidden = true;
+    await runScript(paramValues);
+  });
+  el.btnParamsCancel.addEventListener('click', () => { el.paramsPanel.hidden = true; });
+  el.btnParamsClose.addEventListener('click', () => { el.paramsPanel.hidden = true; });
+
+  // ---- 実行制御 ----
+  el.btnRun.addEventListener('click', handleRunClick);
+  el.btnStop.addEventListener('click', async () => {
+    await window.reiAPI.stop();
+    showToast('停止しました', 'warn');
+  });
+
+  // ---- ステップ実行 (C) ----
+  el.stepModeToggle.addEventListener('change', async () => {
+    await window.reiAPI.logSetStepMode(el.stepModeToggle.checked);
+  });
+
+  const doStepNext = async () => {
+    await window.reiAPI.logStepNext();
+    state.isStepPaused = false;
+    el.btnStepNext.disabled = true;
+    el.btnStepNextFloat.disabled = true;
+  };
+  const doStepContinue = async () => {
+    await window.reiAPI.logStepContinue();
+    state.isStepPaused = false;
+    el.stepIndicator.hidden = true;
+    el.btnStepNext.disabled = true;
+    el.stepModeToggle.checked = false;
+  };
+
+  el.btnStepNext.addEventListener('click', doStepNext);
+  el.btnStepContinue.addEventListener('click', doStepContinue);
+  el.btnStepNextFloat.addEventListener('click', doStepNext);
+  el.btnStepContinueFloat.addEventListener('click', doStepContinue);
+
+  // ---- パネルタブ ----
+  el.panelTabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      const name = (tab as HTMLElement).dataset.panel!;
+      switchPanel(name);
+    });
+  });
+
+  el.btnLogClear.addEventListener('click', clearLogs);
+  el.btnLogExport.addEventListener('click', exportLogs);
+
+  // ---- モーダル ----
+  el.btnModalSaveConfirm.addEventListener('click', saveCurrentScript);
+  document.querySelectorAll('.modal-close').forEach(btn => {
+    btn.addEventListener('click', () => {
+      (btn.closest('.modal') as HTMLElement).hidden = true;
+    });
+  });
+  el.saveNameInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') saveCurrentScript();
+  });
+
+  // ---- エラーポリシー (B) ----
+  el.errorPolicy.addEventListener('change', async () => {
+    await window.reiAPI.errorSetPolicy(el.errorPolicy.value);
+  });
+
+  // ---- IPC イベント受信 ----
+  window.reiAPI.onLogEntry((entry: LogEntry) => {
+    appendLogEntry(entry);
+    // 変数更新があれば変数パネルを更新
+    if (entry.variables) updateVarsPanel(entry.variables);
+  });
+
+  window.reiAPI.onStepPause((entry: LogEntry) => {
+    state.isStepPaused = true;
+    el.stepIndicator.hidden = false;
+    el.stepLineInfo.textContent = `Line ${entry.lineNumber ?? '?'}`;
+    el.stepCommandInfo.textContent = entry.command ?? entry.message;
+    el.btnStepNext.disabled = false;
+    el.btnStepNextFloat.disabled = false;
+    switchPanel('log'); // ログパネルへ自動切替
+  });
+}
+
+// ============================================================
+// 初期化
+// ============================================================
+async function init(): Promise<void> {
+  initEventListeners();
+  await loadScriptList();
+  await loadHistory();
+  showToast('Phase 6 起動完了 🚀');
+}
+
+init().catch(console.error);

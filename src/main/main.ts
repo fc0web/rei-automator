@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Rei Automator - Main Process
  * Electron メインプロセス
  */
@@ -282,6 +282,38 @@ function setupIpcHandlers(): void {
 }
 
 // アプリ起動
+﻿  // ========== Phase 6 ==========
+  const { ScriptManager } = require('../lib/core/script-manager');
+  const { Logger } = require('../lib/core/logger');
+  const { ErrorHandler } = require('../lib/core/error-handler');
+  const { scanParams } = require('../lib/core/variables');
+  const scriptManager = new ScriptManager();
+  const logger = new Logger();
+  const errorHandler = new ErrorHandler(logger);
+  logger.onLog = (entry: any) => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('log:entry', entry); };
+  logger.onStepPause = (entry: any) => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('log:step-pause', entry); };
+  ipcMain.handle('script:save', async (_e, name, content, tags, id) => scriptManager.saveScript(name, content, tags, id));
+  ipcMain.handle('script:load', async (_e, id) => scriptManager.loadScript(id));
+  ipcMain.handle('script:delete', async (_e, id) => scriptManager.deleteScript(id));
+  ipcMain.handle('script:list', async () => scriptManager.listScripts());
+  ipcMain.handle('script:history', async (_e, scriptId) => scriptManager.getHistory(scriptId));
+  ipcMain.handle('script:record-execution', async (_e, id, duration, success, errorMsg) => scriptManager.recordExecution(id, duration, success, errorMsg));
+  ipcMain.handle('script:scan-params', async (_e, cnt) => scanParams(cnt));
+  ipcMain.handle('script:export', async (_e, id, destPath) => scriptManager.exportScript(id, destPath));
+  ipcMain.handle('script:import', async (_e, srcPath, name) => scriptManager.importScript(srcPath, name));
+  ipcMain.handle('log:start-session', async (_e, scriptName) => logger.startSession(scriptName));
+  ipcMain.handle('log:end-session', async (_e, success) => logger.endSession(success));
+  ipcMain.handle('log:get-current', async () => logger.getRecentLogs(200));
+  ipcMain.handle('log:export-text', async () => logger.exportLogsAsText());
+  ipcMain.handle('log:set-step-mode', async (_e, enabled) => logger.setStepMode(enabled));
+  ipcMain.handle('log:step-next', async () => logger.stepNext());
+  ipcMain.handle('log:step-continue', async () => logger.stepContinue());
+  ipcMain.handle('error:set-policy', async (_e, policy) => { if (policy==='stop'||policy==='skip') { errorHandler.setGlobalPolicy(policy); } else if (policy.startsWith('retry:')) { errorHandler.setGlobalPolicy({retry:parseInt(policy.split(':')[1],10)}); } });
+  ipcMain.handle('error:get-errors', async () => errorHandler.getErrors());
+  ipcMain.handle('error:clear', async () => errorHandler.clearErrors());
+  ipcMain.handle('dialog:save-file', async (_e, defaultName) => { if (!mainWindow) return null; const {dialog} = require('electron'); const r = await dialog.showSaveDialog(mainWindow, {defaultPath:defaultName, filters:[{name:'Rei Script',extensions:['rei','txt']}]}); return r.canceled ? null : r.filePath; });
+  ipcMain.handle('dialog:open-file', async () => { if (!mainWindow) return null; const {dialog} = require('electron'); const r = await dialog.showOpenDialog(mainWindow, {filters:[{name:'Rei Script',extensions:['rei','txt']}],properties:['openFile']}); return r.canceled ? null : r.filePaths[0]; });
+
 app.whenReady().then(() => {
   const useStub = process.argv.includes('--stub');
   executor = new ReiExecutor(useStub);
@@ -294,6 +326,7 @@ app.whenReady().then(() => {
   // runtime に注入（executor経由）
   if (executor && screenCapture) {
     executor.setImageMatcher(imageMatcher);
+  executor.setLogger(logger);
     executor.setCaptureFunc(async () => {
       const r = await screenCapture!.captureAndSave();
       if (!r.success || !r.savedPath) throw new Error('キャプチャ失敗');
