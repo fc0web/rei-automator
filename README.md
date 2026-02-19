@@ -11,31 +11,38 @@ Rei Automatorは、Rei言語をベースとした直感的なPC自動操作ツ�
 
 - 📷 **簡単キャプチャ**: 画面要素をドラッグで選択、自動保存
 - 🎯 **座標指定**: クリック先をマウスで指定、座標自動記録
-- 🇯🇵 **日本語対応**: 自然な日本語入力でコード生成
+- 🖼️ **画像認識**: テンプレートマッチングによるアプリ横断の自動化
+- 🌐 **多言語対応**: 日本語・英語・中国語・韓国語・ドイツ語・スペイン語・フランス語・ポルトガル語・ロシア語
 - 💻 **軽量**: Electronベースで高速起動
 - 🔒 **安全**: ユーザーがコードを確認してから実行
 
 ## 開発状態
 
-**現在のバージョン: v0.1.0 - Phase 1 (開発中)**
+**現在のバージョン: v0.4.0 (Phase 7 完了)**
 
-### Phase 1の実装範囲
-- [x] Electronスキャフォールド
-- [x] 基本UI
-- [ ] マウス操作（クリック・移動・ドラッグ）
-- [ ] キーボード操作（文字入力・キー送信）
-- [ ] 色検出
-- [ ] 待機・ループ
-- [ ] Reiコード実行エンジン
-- [ ] 停止機能（ESCキー）
+### 実装済み機能
+- [x] Electronスキャフォールド & 基本UI
+- [x] マウス操作（クリック・移動・ドラッグ）
+- [x] キーボード操作（文字入力・キー送信）
+- [x] 色検出
+- [x] 待機・ループ
+- [x] Reiコード実行エンジン
+- [x] 停止機能（ESCキー）
+- [x] キャプチャモード
+- [x] 座標指定モード
+- [x] 画像マッチング（テンプレートマッチング）
+- [x] OCR
+- [x] スクリプト保存・読み込み
+- [x] スケジュール実行
+- [x] エラーハンドリング
+- [x] i18n（9言語対応）
+- [x] ポータブル版インストーラー
 
-### Phase 2以降の予定
-- キャプチャモード
-- 座標指定モード
-- 画像マッチング（OpenCV）
-- OCR（Tesseract.js）
-- 日本語→Reiコード変換
-- スクリプト保存・読み込み
+### 今後の予定
+- [ ] NSISインストーラー
+- [ ] マルチディスプレイ対応
+- [ ] UIのさらなる改善
+- [ ] 商用化・配布戦略
 
 ## セットアップ
 
@@ -56,17 +63,23 @@ cd rei-automator
 npm install
 
 # 開発モードで起動
-npm run dev
+npm start
 ```
 
 ### ビルド
 
 ```bash
-# プロダクションビルド
+# TypeScriptコンパイル + アセットコピー
 npm run build
 
-# Windows用インストーラーを作成
+# ポータブル版 .exe 作成
 npm run package
+
+# NSISインストーラー .exe 作成
+npm run package:nsis
+
+# 全ターゲット作成
+npm run package:all
 ```
 
 ## プロジェクト構造
@@ -74,6 +87,7 @@ npm run package
 ```
 rei-automator/
 ├── src/
+│   ├── i18n.ts        # メインプロセス用i18nモジュール
 │   ├── main/          # Electronメインプロセス
 │   │   ├── main.ts
 │   │   └── preload.ts
@@ -86,13 +100,14 @@ rei-automator/
 │       ├── auto/      # PC操作層
 │       ├── nlp/       # 日本語変換
 │       └── ui/        # UI層
+├── locales/           # 翻訳ファイル（9言語）
 ├── assets/            # アセット（アイコン等）
 ├── captures/          # キャプチャ画像
 ├── scripts/           # ユーザースクリプト
 └── package.json
 ```
 
-## 使い方（Phase 1）
+## 使い方
 
 1. アプリケーションを起動
 2. Reiコードエリアに直接コードを記述
@@ -117,43 +132,17 @@ loop:
   wait(2s)
 ```
 
-## 開発
-
-### 開発環境での実行
-
-```bash
-# 開発サーバー起動（ホットリロード付き）
-npm run dev
-
-# TypeScriptのコンパイルのみ
-npm run build
-```
-
-### テスト
-
-```bash
-# テスト実行（Phase 1では未実装）
-npm test
-```
-
-### コードフォーマット
-
-```bash
-# ESLintでコードチェック
-npm run lint
-```
-
 ## 技術スタック
 
 | レイヤー | 技術 |
 |---------|------|
 | UI | Electron |
-| Reiランタイム | TypeScript（既存rei-langから流用予定） |
-| マウス/KB | robotjs or nutjs（Windows実テストで決定） |
+| Reiランタイム | TypeScript |
+| マウス/KB | @nut-tree/nut-js |
 | 画面キャプチャ | screenshot-desktop |
-| 画像マッチング | opencv4nodejs |
+| 画像マッチング | テンプレートマッチング（独自実装） |
 | OCR | tesseract.js |
-| Win32 API | node-ffi-napi |
+| i18n | 独自実装（IPC + JSON） |
 
 ## 制約事項
 
@@ -161,11 +150,29 @@ npm run lint
 - 管理者権限は不要
 - 一部のアプリ（UAC保護下等）では動作しない場合があります
 
-## ライセンス
+## License / ライセンス
 
-MIT License
+Rei Automator is available under a **dual license**:
 
-Copyright (c) 2024-2026 Nobuki Fujimoto
+- ✅ **Free** — Personal use, non-profit organizations, education & research
+- 💼 **Commercial license required** — For-profit companies and commercial use
+
+For commercial licensing inquiries:
+[GitHub Issues](https://github.com/fc0web/rei-automator/issues) ・ [note.com](https://note.com/nifty_godwit2635) ・ fc2webb@gmail.com
+
+See [LICENSE](./LICENSE) for full details.
+
+---
+
+Rei Automator は**デュアルライセンス**で提供されています：
+
+- ✅ **無料** — 個人利用、非営利団体、教育・研究目的
+- 💼 **商用ライセンスが必要** — 営利企業での利用、商用目的での使用
+
+商用ライセンスのお問い合わせ：
+[GitHub Issues](https://github.com/fc0web/rei-automator/issues) ・ [note.com](https://note.com/nifty_godwit2635) ・ fc2webb@gmail.com
+
+詳細は [LICENSE](./LICENSE) をご覧ください。
 
 ## 関連リンク
 
@@ -176,7 +183,7 @@ Copyright (c) 2024-2026 Nobuki Fujimoto
 
 藤本 伸樹 (Nobuki Fujimoto)
 - GitHub: [@fc0web](https://github.com/fc0web)
-- Note: [note.com/fc0web](https://note.com/fc0web)
+- Note: [note.com](https://note.com/nifty_godwit2635)
 
 ---
 
