@@ -218,8 +218,8 @@ export interface ExecutionContext {
   onLog: (message: string, level: LogLevel) => void;
   /** ステータス変更コールバック */
   onStatusChange: (status: ExecutionStatus) => void;
-  /** 行実行コールバック */
-  onLineExecute: (line: number) => void;
+  /** 行実行コールバック（async対応） */
+  onLineExecute: (line: number) => void | Promise<void>;
 }
 
 export type LogLevel = 'info' | 'warn' | 'error' | 'debug';

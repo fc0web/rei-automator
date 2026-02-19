@@ -75,24 +75,26 @@ function setupIpcHandlers(): void {
       return { success: false, error: '既に実行中です' };
     }
 
-    // 非同期実行（UIをブロックしない）
-    executor.execute(code).then((result) => {
+    // 実行完了まで待機（ステップ実行中もIPCは別チャンネルで継続可能）
+    try {
+      const result = await executor.execute(code);
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('execution-complete', result);
       }
-    }).catch((error) => {
+      return result;
+    } catch (error: any) {
       console.error('[Main] Execution error:', error);
+      const result = {
+        success: false,
+        error: error.message,
+        executedLines: 0,
+        totalTime: 0,
+      };
       if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('execution-complete', {
-          success: false,
-          error: error.message,
-          executedLines: 0,
-          totalTime: 0,
-        });
+        mainWindow.webContents.send('execution-complete', result);
       }
-    });
-
-    return { success: true, message: 'Execution started' };
+      return result;
+    }
   });
 
   // 停止
@@ -327,6 +329,7 @@ app.whenReady().then(() => {
   if (executor && screenCapture) {
     executor.setImageMatcher(imageMatcher);
   executor.setLogger(logger);
+  executor.setErrorHandler(errorHandler);
     executor.setCaptureFunc(async () => {
       const r = await screenCapture!.captureAndSave();
       if (!r.success || !r.savedPath) throw new Error('キャプチャ失敗');

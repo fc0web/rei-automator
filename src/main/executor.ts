@@ -13,11 +13,13 @@ import { ExecutionResult } from '../lib/core/types';
 import { ImageMatcher } from '../lib/auto/image-matcher';
 import { VariableStore, preprocessLine } from '../lib/core/variables';
 import { Logger } from '../lib/core/logger';
+import { ErrorHandler } from '../lib/core/error-handler';
 
 export class ReiExecutor {
   private runtime: ReiRuntime;
   private window: BrowserWindow | null = null;
   private logger: Logger | null = null;
+  private errorHandler: ErrorHandler | null = null;
   private varStore: VariableStore = new VariableStore();
   private useStub: boolean;
 
@@ -52,11 +54,11 @@ export class ReiExecutor {
         console.log(`[Rei Status] ${status}`);
         this.sendToRenderer('execution-status', status);
       },
-      onLineExecute: (line) => {
+      onLineExecute: async (line) => {
         this.sendToRenderer('execution-line', line);
-        // ログエントリ送信
+        // ステップ実行: awaitでlogStep内の一時停止Promiseを待機
         if (this.logger) {
-          this.logger.logStep(line, 'executing', this.varStore.getAll());
+          await this.logger.logStep(line, 'executing', this.varStore.getAll());
         }
         // 変数状態をリアルタイム送信
         this.sendToRenderer('log:entry', {
@@ -81,6 +83,10 @@ export class ReiExecutor {
     this.logger = logger;
   }
 
+  setErrorHandler(handler: ErrorHandler): void {
+    this.errorHandler = handler;
+  }
+
   /**
    * Reiコードを実行
    */
@@ -92,6 +98,18 @@ export class ReiExecutor {
     this.varStore.clear();
     const processedLines = code.split('\n').map((line) => preprocessLine(line, this.varStore));
     const processedCode = processedLines.filter((l) => l !== '__SET__' && l !== '__PARAM__').join('\n');
+
+    // set命令で設定された変数をUIへ即時送信（コマンドがなくても表示されるように）
+    const initialVars = this.varStore.getAll();
+    if (Object.keys(initialVars).length > 0) {
+      this.sendToRenderer('log:entry', {
+        id: 'vars_init_' + Date.now(),
+        timestamp: new Date().toISOString(),
+        level: 'info',
+        message: '変数を初期化しました',
+        variables: initialVars,
+      });
+    }
     if (this.logger) this.logger.startSession('script');
     // パース
     const program = parse(processedCode);

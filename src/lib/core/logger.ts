@@ -97,6 +97,7 @@ export class Logger {
     command: string,
     variables?: Record<string, unknown>
   ): Promise<void> {
+    console.log(`[Logger] logStep called: line=${lineNumber}, stepMode=${this.stepMode}`);
     const entry = this.log('step', `Line ${lineNumber}: ${command}`, {
       lineNumber,
       command,

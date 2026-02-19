@@ -75,7 +75,7 @@ export class ReiRuntime {
   setCallbacks(callbacks: {
     onLog?: (message: string, level: string) => void;
     onStatusChange?: (status: ExecutionStatus) => void;
-    onLineExecute?: (line: number) => void;
+    onLineExecute?: (line: number) => void | Promise<void>;
   }) {
     if (callbacks.onLog) this.context.onLog = callbacks.onLog;
     if (callbacks.onStatusChange) this.context.onStatusChange = callbacks.onStatusChange;
@@ -232,9 +232,9 @@ export class ReiRuntime {
       // コメントはスキップ
       if (command.type === 'comment') continue;
 
-      // 行番号を通知
+      // 行番号を通知（awaitでステップ実行の一時停止を待機）
       this.context.currentLine = command.line;
-      this.context.onLineExecute(command.line);
+      await this.context.onLineExecute(command.line);
 
       // コマンドを実行
       await this.executeCommand(command);
