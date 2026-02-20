@@ -16,10 +16,11 @@ import * as path from 'path';
 import * as fs from 'fs';
 
 // 既存モジュールの再利用
+import { parse } from '../lib/core/parser';
 import { ReiRuntime } from '../lib/core/runtime';
-import { ReiParser } from '../lib/core/parser';
-import { ErrorHandler } from '../lib/core/error-handler';
-import { Logger, LogLevel } from '../lib/core/logger';
+import { AutoController } from '../lib/auto/controller';
+import { WindowsBackend } from '../lib/auto/windows-backend';
+import { Logger, LogLevel } from './logger';
 import { Daemon, DaemonConfig } from './daemon';
 import { ServiceManager } from './service';
 import { HealthChecker } from './health';
@@ -138,17 +139,17 @@ async function handleRun(
   logger.info(`Running script: ${scriptPath}`);
   const code = fs.readFileSync(scriptPath, 'utf-8');
 
-  const parser = new ReiParser();
-  const commands = parser.parse(code);
+  const program = parse(code);
+  const backend = new WindowsBackend((msg: string) => logger.debug(msg));
+  const controller = new AutoController(backend);
+  const runtime = new ReiRuntime(controller);
 
-  const runtime = new ReiRuntime({
-    mode: config.executionMode,
-    defaultWindow: config.defaultWindow,
-    logger,
-  });
+  if (config.executionMode === 'cursorless' && config.defaultWindow) {
+    runtime.setExecutionMode('cursorless', config.defaultWindow);
+  }
 
   const startTime = Date.now();
-  await runtime.execute(commands);
+  await runtime.execute(program);
   const elapsed = Date.now() - startTime;
 
   logger.info(`Script completed in ${elapsed}ms`);
@@ -256,7 +257,7 @@ async function handleService(
  */
 async function handleHealth(
   config: HeadlessConfig,
-  logger: Logger
+  _logger: Logger
 ): Promise<void> {
   const checker = new HealthChecker(config.healthPort);
   const result = await checker.check();
@@ -278,7 +279,7 @@ async function handleHealth(
  */
 async function handleList(
   config: HeadlessConfig,
-  logger: Logger
+  _logger: Logger
 ): Promise<void> {
   const checker = new HealthChecker(config.healthPort);
   const tasks = await checker.listTasks();

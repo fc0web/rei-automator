@@ -3,26 +3,21 @@
  * Phase 9a+9b+9d: スケジューラ統合 + ファイル監視 + REST API + WebSocket + クラスタ
  *
  * ★ 既存の daemon.ts を置き換えてください。
- *
- * Phase 9d で追加された変更点:
- * - NodeManager（ノードディスカバリ・ハートビート・リーダー選出）を統合
- * - TaskDispatcher（3戦略タスク分配）を統合
- * - DaemonConfig にクラスタ関連設定を追加
- * - タスク実行の統計を NodeManager に連携
- * - 公開メソッド追加（getNodeManager, getTaskDispatcher）
  */
 
 import * as path from 'path';
 import * as fs from 'fs';
 import { EventEmitter } from 'events';
 
+import { parse } from '../lib/core/parser';
 import { ReiRuntime } from '../lib/core/runtime';
-import { ReiParser } from '../lib/core/parser';
-import { Logger } from '../lib/core/logger';
+import { AutoController } from '../lib/auto/controller';
+import { WindowsBackend } from '../lib/auto/windows-backend';
+import { Logger } from './logger';
 import { ScriptWatcher } from './watcher';
 import { ApiServer } from './api-server';
 import { NodeManager, NodeConfig } from './node-manager';
-import { TaskDispatcher, DispatcherConfig, DispatchStrategy } from './task-dispatcher';
+import { TaskDispatcher, DispatchStrategy } from './task-dispatcher';
 
 // ─── 型定義 ──────────────────────────────────────────
 
@@ -34,17 +29,15 @@ export interface DaemonConfig {
   retryDelayMs: number;
   executionMode: 'cursor' | 'cursorless';
   defaultWindow?: string;
-  // Phase 9b: API設定
   apiHost?: string;
   authEnabled?: boolean;
   apiKeyFilePath?: string;
-  // Phase 9d: クラスタ設定
   clusterEnabled?: boolean;
   nodeId?: string;
   nodeName?: string;
-  seedNodes?: string[];        // ["host:port", ...]
-  heartbeatInterval?: number;  // ms (default: 10000)
-  heartbeatTimeout?: number;   // ms (default: 30000)
+  seedNodes?: string[];
+  heartbeatInterval?: number;
+  heartbeatTimeout?: number;
   dispatchStrategy?: DispatchStrategy;
 }
 
@@ -85,9 +78,7 @@ export class Daemon extends EventEmitter {
   private watcher?: ScriptWatcher;
   private apiServer?: ApiServer;
   private scheduleTimers: Map<string, NodeJS.Timeout> = new Map();
-  private parser: ReiParser;
 
-  // ★ Phase 9d: クラスタ
   private nodeManager?: NodeManager;
   private taskDispatcher?: TaskDispatcher;
   private statsUpdateTimer?: NodeJS.Timeout;
@@ -96,7 +87,18 @@ export class Daemon extends EventEmitter {
     super();
     this.config = config;
     this.logger = logger;
-    this.parser = new ReiParser();
+  }
+
+  // ─── Runtime生成ヘルパー ─────────────────────────
+
+  private createRuntime(): ReiRuntime {
+    const backend = new WindowsBackend((msg: string) => this.logger.debug(msg));
+    const controller = new AutoController(backend);
+    const runtime = new ReiRuntime(controller);
+    if (this.config.executionMode === 'cursorless' && this.config.defaultWindow) {
+      runtime.setExecutionMode('cursorless', this.config.defaultWindow);
+    }
+    return runtime;
   }
 
   // ─── ライフサイクル ──────────────────────────────
@@ -104,32 +106,25 @@ export class Daemon extends EventEmitter {
   async start(): Promise<void> {
     this.running = true;
     this.startedAt = Date.now();
-
     this.logger.info('Daemon starting...');
 
-    // 1. ディレクトリ確認・作成
     this.ensureDir(this.config.watchDir);
     this.ensureDir(this.config.logDir);
 
-    // 2. 既存スクリプトの読み込み
     await this.loadExistingScripts();
 
-    // 3. ファイル監視開始
     this.watcher = new ScriptWatcher(this.config.watchDir, this.logger);
     this.watcher.on('script:added', (filePath: string) => this.onScriptAdded(filePath));
     this.watcher.on('script:changed', (filePath: string) => this.onScriptChanged(filePath));
     this.watcher.on('script:removed', (filePath: string) => this.onScriptRemoved(filePath));
     this.watcher.start();
 
-    // 4. スケジュールタスクの起動
     this.startScheduledTasks();
 
-    // 5. ★ Phase 9d: クラスタ初期化（API サーバーより先に）
     if (this.config.clusterEnabled) {
       this.initCluster();
     }
 
-    // 6. APIサーバー起動（REST + WebSocket + ヘルス + クラスタAPI 統合）
     this.apiServer = new ApiServer(this, {
       port: this.config.healthPort,
       host: this.config.apiHost || '0.0.0.0',
@@ -140,7 +135,6 @@ export class Daemon extends EventEmitter {
     }, this.logger);
     await this.apiServer.start();
 
-    // 7. ★ Phase 9d: ノードマネージャー開始（APIサーバーが立った後に）
     if (this.nodeManager) {
       await this.nodeManager.start();
       this.startStatsSync();
@@ -151,8 +145,6 @@ export class Daemon extends EventEmitter {
     }
 
     this.logger.info(`Daemon started (PID: ${process.pid})`);
-
-    // メインループ（プロセスを維持）
     await this.mainLoop();
   }
 
@@ -160,36 +152,18 @@ export class Daemon extends EventEmitter {
     this.running = false;
     this.logger.info('Daemon stopping...');
 
-    // スケジュールタイマー停止
-    for (const [id, timer] of this.scheduleTimers) {
-      clearInterval(timer);
-    }
+    for (const [, timer] of this.scheduleTimers) { clearInterval(timer); }
     this.scheduleTimers.clear();
 
-    // stats同期タイマー停止
-    if (this.statsUpdateTimer) {
-      clearInterval(this.statsUpdateTimer);
-    }
-
-    // ★ Phase 9d: ノードマネージャー停止
-    if (this.nodeManager) {
-      await this.nodeManager.stop();
-    }
-
-    // ファイル監視停止
-    if (this.watcher) {
-      this.watcher.stop();
-    }
-
-    // APIサーバー停止
-    if (this.apiServer) {
-      await this.apiServer.stop();
-    }
+    if (this.statsUpdateTimer) { clearInterval(this.statsUpdateTimer); }
+    if (this.nodeManager) { await this.nodeManager.stop(); }
+    if (this.watcher) { this.watcher.stop(); }
+    if (this.apiServer) { await this.apiServer.stop(); }
 
     this.logger.info('Daemon stopped');
   }
 
-  // ─── ★ Phase 9d: クラスタ初期化 ─────────────────
+  // ─── クラスタ初期化 ─────────────────────────────
 
   private initCluster(): void {
     const nodeConfig: Partial<NodeConfig> = {
@@ -206,66 +180,46 @@ export class Daemon extends EventEmitter {
       defaultStrategy: this.config.dispatchStrategy || 'round-robin',
     });
 
-    // ノードイベントをデーモンイベントとして中継
     this.nodeManager.on('node:joined', (node: any) => {
       this.logger.info(`[Cluster] Node joined: ${node.name} (${node.host})`);
       this.emit('cluster:node:joined', node);
     });
-
     this.nodeManager.on('node:offline', (node: any) => {
       this.logger.warn(`[Cluster] Node offline: ${node.name}`);
       this.emit('cluster:node:offline', node);
     });
-
     this.nodeManager.on('node:left', (node: any) => {
       this.logger.info(`[Cluster] Node left: ${node.name}`);
       this.emit('cluster:node:left', node);
     });
-
     this.nodeManager.on('leader:elected', (leader: any) => {
       this.logger.info(`[Cluster] Leader elected: ${leader.name} (${leader.id})`);
       this.emit('cluster:leader:elected', leader);
     });
 
-    // ディスパッチイベント
     this.taskDispatcher.on('dispatch:success', (result: any) => {
-      this.logger.info(
-        `[Dispatch] Success: ${result.taskId} → ${result.targetNodeId} (${result.strategy})`
-      );
+      this.logger.info(`[Dispatch] Success: ${result.taskId} → ${result.targetNodeId} (${result.strategy})`);
       this.emit('dispatch:success', result);
     });
-
     this.taskDispatcher.on('dispatch:error', (result: any) => {
-      this.logger.error(
-        `[Dispatch] Error: ${result.taskId} → ${result.error}`
-      );
+      this.logger.error(`[Dispatch] Error: ${result.taskId} → ${result.error}`);
       this.emit('dispatch:error', result);
     });
 
     this.logger.info('[Cluster] NodeManager + TaskDispatcher initialized');
   }
 
-  /**
-   * 定期的にタスク統計をNodeManagerに反映
-   */
   private startStatsSync(): void {
     this.statsUpdateTimer = setInterval(() => {
       if (this.nodeManager) {
         const activeTasks = Array.from(this.tasks.values()).filter(t => t.running).length;
-        this.nodeManager.updateTaskStats(
-          activeTasks,
-          this.queue.length,
-          this.completedTasks
-        );
+        this.nodeManager.updateTaskStats(activeTasks, this.queue.length, this.completedTasks);
       }
-    }, 5000); // 5秒ごと
+    }, 5000);
   }
 
   // ─── 公開メソッド ─────────────────────────────────
 
-  /**
-   * 統計情報を外部に公開（ApiRoutesから呼ばれる）
-   */
   getPublicStats(): any {
     const mem = process.memoryUsage();
     const stats: any = {
@@ -279,14 +233,10 @@ export class Daemon extends EventEmitter {
       pid: process.pid,
       memoryMB: mem.heapUsed / (1024 * 1024),
     };
-
-    // ★ Phase 9d: クラスタ情報を統計に追加
     if (this.nodeManager) {
       stats.cluster = {
-        enabled: true,
-        nodeId: this.nodeManager.getSelf().id,
-        nodeName: this.nodeManager.getSelf().name,
-        role: this.nodeManager.getSelf().role,
+        enabled: true, nodeId: this.nodeManager.getSelf().id,
+        nodeName: this.nodeManager.getSelf().name, role: this.nodeManager.getSelf().role,
         isLeader: this.nodeManager.isLeader(),
         totalNodes: this.nodeManager.getNodes().length,
         onlineNodes: this.nodeManager.getOnlineNodes().length,
@@ -295,77 +245,33 @@ export class Daemon extends EventEmitter {
     } else {
       stats.cluster = { enabled: false };
     }
-
     return stats;
   }
 
-  /**
-   * タスク一覧を外部に公開
-   */
-  getTaskList(): TaskEntry[] {
-    return Array.from(this.tasks.values());
-  }
+  getTaskList(): TaskEntry[] { return Array.from(this.tasks.values()); }
 
-  /**
-   * タスク詳細を外部に公開
-   */
   getTask(id: string): TaskEntry | null {
-    // IDが完全一致 or 名前に部分一致
     const direct = this.tasks.get(id);
     if (direct) return direct;
-
     for (const task of this.tasks.values()) {
       if (task.name === id || task.id.includes(id)) return task;
     }
     return null;
   }
 
-  /**
-   * watchDirパスを外部に公開
-   */
-  getWatchDir(): string {
-    return this.config.watchDir;
-  }
+  getWatchDir(): string { return this.config.watchDir; }
+  getNodeManager(): NodeManager | undefined { return this.nodeManager; }
+  getTaskDispatcher(): TaskDispatcher | undefined { return this.taskDispatcher; }
+  isClusterEnabled(): boolean { return !!this.nodeManager; }
 
-  /**
-   * ★ Phase 9d: NodeManagerへの参照を返す
-   */
-  getNodeManager(): NodeManager | undefined {
-    return this.nodeManager;
-  }
-
-  /**
-   * ★ Phase 9d: TaskDispatcherへの参照を返す
-   */
-  getTaskDispatcher(): TaskDispatcher | undefined {
-    return this.taskDispatcher;
-  }
-
-  /**
-   * ★ Phase 9d: クラスタが有効かどうか
-   */
-  isClusterEnabled(): boolean {
-    return !!this.nodeManager;
-  }
-
-  /**
-   * リモートからのスクリプト実行（POST /api/tasks/run）
-   */
   async executeRemote(taskId: string, name: string, code: string): Promise<{ elapsed: number }> {
     this.emit('task:started', { id: taskId, name });
-
     try {
-      const commands = this.parser.parse(code);
-      const runtime = new ReiRuntime({
-        mode: this.config.executionMode,
-        defaultWindow: this.config.defaultWindow,
-        logger: this.logger,
-      });
-
+      const program = parse(code);
+      const runtime = this.createRuntime();
       const startTime = Date.now();
-      await runtime.execute(commands);
+      await runtime.execute(program);
       const elapsed = Date.now() - startTime;
-
       this.completedTasks++;
       this.emit('task:completed', { id: taskId, name, elapsed });
       return { elapsed };
@@ -376,140 +282,79 @@ export class Daemon extends EventEmitter {
     }
   }
 
-  /**
-   * タスクの停止リクエスト
-   */
   stopTask(taskId: string): boolean {
     for (const [id, task] of this.tasks) {
       if (id === taskId || task.name === taskId || id.includes(taskId)) {
-        if (task.running) {
-          task.running = false;
-          this.logger.info(`Stop requested: ${task.name}`);
-          return true;
-        }
+        if (task.running) { task.running = false; this.logger.info(`Stop requested: ${task.name}`); return true; }
       }
     }
     return false;
   }
 
-  /**
-   * デーモンのリロード（スクリプト再読み込み）
-   */
   async reload(): Promise<void> {
     this.logger.info('Reloading daemon...');
-
-    // スケジュールクリア
-    for (const [, timer] of this.scheduleTimers) {
-      clearInterval(timer);
-    }
+    for (const [, timer] of this.scheduleTimers) { clearInterval(timer); }
     this.scheduleTimers.clear();
     this.tasks.clear();
-
-    // 再読み込み
     await this.loadExistingScripts();
     this.startScheduledTasks();
-
     this.logger.info('Daemon reloaded');
   }
 
   // ─── スクリプト管理 ──────────────────────────────
 
   private async loadExistingScripts(): Promise<void> {
-    const files = fs.readdirSync(this.config.watchDir)
-      .filter(f => f.endsWith('.rei'));
-
-    for (const file of files) {
-      const filePath = path.join(this.config.watchDir, file);
-      this.registerTask(filePath);
-    }
-
+    const files = fs.readdirSync(this.config.watchDir).filter(f => f.endsWith('.rei'));
+    for (const file of files) { this.registerTask(path.join(this.config.watchDir, file)); }
     this.logger.info(`Loaded ${files.length} scripts from ${this.config.watchDir}`);
   }
 
   private registerTask(scriptPath: string): TaskEntry {
     const name = path.basename(scriptPath, '.rei');
     const id = this.taskId(scriptPath);
-
     const code = fs.readFileSync(scriptPath, 'utf-8');
     const schedule = this.extractSchedule(code);
-
-    const task: TaskEntry = {
-      id,
-      name,
-      scriptPath,
-      schedule: schedule || undefined,
-      running: false,
-      runCount: 0,
-      errorCount: 0,
-    };
-
+    const task: TaskEntry = { id, name, scriptPath, schedule: schedule || undefined, running: false, runCount: 0, errorCount: 0 };
     this.tasks.set(id, task);
     this.logger.debug(`Registered task: ${name}${schedule ? ` (schedule: ${schedule})` : ''}`);
-
     return task;
   }
 
   private extractSchedule(code: string): string | null {
-    const lines = code.split('\n');
-    for (const line of lines.slice(0, 10)) {
+    for (const line of code.split('\n').slice(0, 10)) {
       const match = line.match(/\/\/\s*@schedule\s+(.+)/i);
       if (match) return match[1].trim();
     }
     return null;
   }
 
-  // ─── スケジュール実行 ────────────────────────────
+  // ─── スケジュール ────────────────────────────────
 
   private startScheduledTasks(): void {
-    for (const [, task] of this.tasks) {
-      if (task.schedule) {
-        this.scheduleTask(task);
-      }
-    }
+    for (const [, task] of this.tasks) { if (task.schedule) this.scheduleTask(task); }
   }
 
   private scheduleTask(task: TaskEntry): void {
     const intervalMs = this.parseScheduleInterval(task.schedule!);
-
-    if (intervalMs === null) {
-      this.logger.warn(`Invalid schedule for ${task.name}: ${task.schedule}`);
-      return;
-    }
-
-    if (intervalMs === 0) {
-      this.enqueueTask(task.id, task.scriptPath);
-      return;
-    }
+    if (intervalMs === null) { this.logger.warn(`Invalid schedule for ${task.name}: ${task.schedule}`); return; }
+    if (intervalMs === 0) { this.enqueueTask(task.id, task.scriptPath); return; }
 
     const timer = setInterval(() => {
-      if (this.running && !task.running) {
-        this.enqueueTask(task.id, task.scriptPath);
-      }
+      if (this.running && !task.running) this.enqueueTask(task.id, task.scriptPath);
     }, intervalMs);
-
     this.scheduleTimers.set(task.id, timer);
     this.logger.info(`Scheduled ${task.name}: every ${intervalMs / 1000}s`);
-
     this.enqueueTask(task.id, task.scriptPath);
   }
 
   private parseScheduleInterval(schedule: string): number | null {
     if (schedule === 'once') return 0;
-
     const match = schedule.match(/every\s+(\d+)(s|m|h|d)/i);
     if (!match) return null;
-
     const value = parseInt(match[1], 10);
     const unit = match[2].toLowerCase();
-
-    const multipliers: Record<string, number> = {
-      's': 1000,
-      'm': 60_000,
-      'h': 3_600_000,
-      'd': 86_400_000,
-    };
-
-    return value * (multipliers[unit] || 0);
+    const m: Record<string, number> = { 's': 1000, 'm': 60_000, 'h': 3_600_000, 'd': 86_400_000 };
+    return value * (m[unit] || 0);
   }
 
   // ─── タスクキュー ────────────────────────────────
@@ -517,14 +362,7 @@ export class Daemon extends EventEmitter {
   private enqueueTask(taskId: string, scriptPath: string): void {
     try {
       const code = fs.readFileSync(scriptPath, 'utf-8');
-      this.queue.push({
-        taskId,
-        scriptPath,
-        code,
-        retryCount: 0,
-        addedAt: Date.now(),
-      });
-
+      this.queue.push({ taskId, scriptPath, code, retryCount: 0, addedAt: Date.now() });
       const task = this.tasks.get(taskId);
       this.emit('task:queued', { id: taskId, name: task?.name || taskId });
       this.logger.debug(`Enqueued: ${path.basename(scriptPath)}`);
@@ -543,62 +381,36 @@ export class Daemon extends EventEmitter {
       const task = this.tasks.get(item.taskId);
       const scriptName = task?.name || path.basename(item.scriptPath);
 
-      if (task) {
-        task.running = true;
-        task.lastRun = new Date().toISOString();
-      }
-
+      if (task) { task.running = true; task.lastRun = new Date().toISOString(); }
       this.emit('task:started', { id: item.taskId, name: scriptName });
       this.logger.info(`Executing: ${scriptName}`);
 
       try {
-        const commands = this.parser.parse(item.code);
-        const runtime = new ReiRuntime({
-          mode: this.config.executionMode,
-          defaultWindow: this.config.defaultWindow,
-          logger: this.logger,
-        });
-
+        const program = parse(item.code);
+        const runtime = this.createRuntime();
         const startTime = Date.now();
-        await runtime.execute(commands);
+        await runtime.execute(program);
         const elapsed = Date.now() - startTime;
 
         this.completedTasks++;
-        if (task) {
-          task.running = false;
-          task.lastResult = 'success';
-          task.runCount++;
-        }
-
+        if (task) { task.running = false; task.lastResult = 'success'; task.runCount++; }
         this.emit('task:completed', { id: item.taskId, name: scriptName, elapsed });
         this.logger.info(`Completed: ${scriptName} (${elapsed}ms)`);
       } catch (err: any) {
         this.errorTasks++;
-        if (task) {
-          task.running = false;
-          task.lastResult = 'error';
-          task.lastError = err.message;
-          task.errorCount++;
-        }
-
+        if (task) { task.running = false; task.lastResult = 'error'; task.lastError = err.message; task.errorCount++; }
         this.emit('task:error', { id: item.taskId, name: scriptName, error: err.message });
         this.logger.error(`Error in ${scriptName}: ${err.message}`);
 
-        // リトライ
         if (item.retryCount < this.config.maxRetries) {
-          this.logger.info(
-            `Retrying ${scriptName} (${item.retryCount + 1}/${this.config.maxRetries})...`
-          );
+          this.logger.info(`Retrying ${scriptName} (${item.retryCount + 1}/${this.config.maxRetries})...`);
           await this.delay(this.config.retryDelayMs);
           this.queue.push({ ...item, retryCount: item.retryCount + 1 });
         } else {
-          this.logger.error(
-            `Giving up on ${scriptName} after ${this.config.maxRetries} retries`
-          );
+          this.logger.error(`Giving up on ${scriptName} after ${this.config.maxRetries} retries`);
         }
       }
     }
-
     this.processing = false;
   }
 
@@ -607,45 +419,28 @@ export class Daemon extends EventEmitter {
   private onScriptAdded(filePath: string): void {
     const task = this.registerTask(filePath);
     this.logger.info(`New script detected: ${task.name}`);
-
-    if (task.schedule) {
-      this.scheduleTask(task);
-    }
+    if (task.schedule) this.scheduleTask(task);
   }
 
   private onScriptChanged(filePath: string): void {
     const id = this.taskId(filePath);
     const existing = this.tasks.get(id);
-
     if (existing && !existing.running) {
       this.logger.info(`Script changed: ${existing.name}, re-registering`);
-
       const timer = this.scheduleTimers.get(id);
-      if (timer) {
-        clearInterval(timer);
-        this.scheduleTimers.delete(id);
-      }
-
+      if (timer) { clearInterval(timer); this.scheduleTimers.delete(id); }
       const task = this.registerTask(filePath);
-      if (task.schedule) {
-        this.scheduleTask(task);
-      }
+      if (task.schedule) this.scheduleTask(task);
     }
   }
 
   private onScriptRemoved(filePath: string): void {
     const id = this.taskId(filePath);
     const task = this.tasks.get(id);
-
     if (task) {
       this.logger.info(`Script removed: ${task.name}`);
-
       const timer = this.scheduleTimers.get(id);
-      if (timer) {
-        clearInterval(timer);
-        this.scheduleTimers.delete(id);
-      }
-
+      if (timer) { clearInterval(timer); this.scheduleTimers.delete(id); }
       this.tasks.delete(id);
     }
   }
@@ -655,8 +450,6 @@ export class Daemon extends EventEmitter {
   private async mainLoop(): Promise<void> {
     while (this.running) {
       await this.delay(1000);
-
-      // 定期的なステータスログ（1時間ごと）
       const uptime = Date.now() - this.startedAt;
       if (uptime > 0 && uptime % 3_600_000 < 1000) {
         const stats = this.getPublicStats();
@@ -672,17 +465,7 @@ export class Daemon extends EventEmitter {
 
   // ─── ヘルパー ────────────────────────────────────
 
-  private taskId(scriptPath: string): string {
-    return path.resolve(scriptPath).toLowerCase().replace(/\\/g, '/');
-  }
-
-  private ensureDir(dir: string): void {
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-  }
-
-  private delay(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
+  private taskId(scriptPath: string): string { return path.resolve(scriptPath).toLowerCase().replace(/\\/g, '/'); }
+  private ensureDir(dir: string): void { if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true }); }
+  private delay(ms: number): Promise<void> { return new Promise(resolve => setTimeout(resolve, ms)); }
 }

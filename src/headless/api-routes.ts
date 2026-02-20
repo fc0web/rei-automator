@@ -29,7 +29,7 @@
 import * as http from 'http';
 import * as fs from 'fs';
 import * as path from 'path';
-import { Logger } from '../lib/core/logger';
+import { Logger } from './logger';
 import { ApiAuth, Permission } from './api-auth';
 import { WsManager } from './ws-manager';
 import { Daemon, TaskEntry } from './daemon';

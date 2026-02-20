@@ -15,7 +15,7 @@
  */
 
 import * as http from 'http';
-import { Logger } from '../lib/core/logger';
+import { Logger } from './logger';
 
 // ─── 型定義 ──────────────────────────────────────────
 

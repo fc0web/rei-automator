@@ -5,6 +5,9 @@
  * ★ 既存の index.ts を置き換えてください。
  */
 
+// Headless Logger (Electron非依存)
+export { Logger, LogLevel, LoggerConfig } from './logger';
+
 // Phase 9a: ヘッドレスデーモン
 export { Daemon, DaemonConfig, TaskEntry } from './daemon';
 export { ServiceManager } from './service';

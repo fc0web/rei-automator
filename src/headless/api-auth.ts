@@ -11,7 +11,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import * as http from 'http';
-import { Logger } from '../lib/core/logger';
+import { Logger } from './logger';
 
 // ─── 型定義 ──────────────────────────────────────────
 

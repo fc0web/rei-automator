@@ -287,7 +287,7 @@ export class TaskDispatcher extends EventEmitter {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
       }
 
-      return await res.json();
+      return (await res.json()) as { taskId: string };
     } catch (err) {
       clearTimeout(timeout);
       throw err;

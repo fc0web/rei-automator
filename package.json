@@ -15,6 +15,8 @@
         "copy-assets": "node -e \"const fs=require('fs');const p=require('path');['index.html','styles.css'].forEach(f=>fs.copyFileSync(p.join('src','renderer',f),p.join('dist','renderer',f)));console.log('Assets copied.')\"",
         "start": "electron .",
         "start:stub": "electron . --stub",
+"start:headless": "node dist/headless/cli.js daemon",
+"start:headless:dev": "npm run build:main && node dist/headless/cli.js daemon",
         "package": "npm run build && electron-builder --config electron-builder.config.js --win portable",
         "test": "jest",
         "lint": "eslint src --ext .ts",
@@ -26,10 +28,12 @@
     "dependencies": {
         "electron-store": "^8.1.0",
         "jimp": "^0.22.12",
-        "tesseract.js": "^7.0.0"
+        "tesseract.js": "^7.0.0",
+        "ws": "^8.19.0"
     },
     "devDependencies": {
         "@types/node": "^20.10.0",
+        "@types/ws": "^8.18.1",
         "@typescript-eslint/eslint-plugin": "^6.13.0",
         "@typescript-eslint/parser": "^6.13.0",
         "concurrently": "^8.2.2",

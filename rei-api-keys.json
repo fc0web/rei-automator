@@ -1,0 +1,12 @@
+{
+  "keys": [
+    {
+      "key": "rei_7465731d2243c8a5cea8b29f4fdb8ae71d3697bda4d58be8",
+      "name": "default-admin",
+      "createdAt": "2026-02-20T21:37:24.412Z",
+      "permissions": [
+        "admin"
+      ]
+    }
+  ]
+}
