@@ -82,6 +82,7 @@ export class ApiServer {
 
       this.server.listen(this.config.port, this.config.host, () => {
         this.logger.info(`API server listening on ${this.config.host}:${this.config.port}`);
+        this.logger.info(`  Dashboard: http://localhost:${this.config.port}/dashboard`);
         this.logger.info(`  REST API:  http://localhost:${this.config.port}/api/`);
         this.logger.info(`  WebSocket: ws://localhost:${this.config.port}/ws`);
         this.logger.info(`  Health:    http://localhost:${this.config.port}/health`);

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Rei Automator Dashboard — Phase 9c</title>
+<title>Rei Automator Dashboard — Phase 9e</title>
 <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -42,6 +42,11 @@ textarea:focus,input:focus{outline:none;border-color:#8ba4b8!important}
 .sc:hover{border-color:rgba(139,164,184,.25);box-shadow:0 0 20px rgba(139,164,184,.06)}
 .sc.mi{padding:12px 14px;gap:10px}
 .pn{background:linear-gradient(180deg,#13151a,#111318);border:1px solid #1e2028;border-radius:12px;padding:18px}
+.conn-dot{width:7px;height:7px;border-radius:50%}
+.conn-dot.live{background:#6ee7b7;animation:pulse-glow 2s infinite}
+.conn-dot.ws{background:#6ee7b7;animation:pulse-glow 2s infinite}
+.conn-dot.poll{background:#fbbf24;animation:pulse-glow 3s infinite}
+.conn-dot.off{background:#f87171}
 </style>
 </head>
 <body>
@@ -49,7 +54,12 @@ textarea:focus,input:focus{outline:none;border-color:#8ba4b8!important}
 <script type="text/babel">
 const{useState,useEffect,useRef,useCallback}=React;
 
-const CFG={API:"http://localhost:19720",WS:"ws://localhost:19720",POLL:5000,DEMO:false};
+/* ─── Configuration ─── */
+const CFG={
+  API: location.origin !== "null" ? location.origin : "http://localhost:19720",
+  WS: (location.origin !== "null" ? location.origin : "http://localhost:19720").replace(/^http/,"ws"),
+  POLL: 5000,
+};
 
 /* ── Icons ── */
 const Z={
@@ -68,7 +78,7 @@ Plus:p=><svg width={p.s||16} height={p.s||16} viewBox="0 0 24 24" fill="none" st
 Eye:p=><svg width={p.s||16} height={p.s||16} viewBox="0 0 24 24" fill="none" stroke={p.c||"currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>,
 Alert:p=><svg width={p.s||16} height={p.s||16} viewBox="0 0 24 24" fill="none" stroke={p.c||"currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>,
 Check:p=><svg width={p.s||16} height={p.s||16} viewBox="0 0 24 24" fill="none" stroke={p.c||"currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>,
-Load:p=><svg width={p.s||16} height={p.s||16} viewBox="0 0 24 24" fill="none" stroke={p.c||"currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg>,
+Load:p=><svg width={p.s||16} height={p.s||16} viewBox="0 0 24 24" fill="none" stroke={p.c||"currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={p.spin?{animation:"spin 1s linear infinite"}:{}}><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg>,
 Srv:p=><svg width={p.s||16} height={p.s||16} viewBox="0 0 24 24" fill="none" stroke={p.c||"currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>,
 Zap:p=><svg width={p.s||16} height={p.s||16} viewBox="0 0 24 24" fill="none" stroke={p.c||"currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>,
 Bar3:p=><svg width={p.s||16} height={p.s||16} viewBox="0 0 24 24" fill="none" stroke={p.c||"currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>,
@@ -113,49 +123,66 @@ function Donut({data,sz=130}){
   return <svg width={sz} height={sz} viewBox={`0 0 ${sz} ${sz}`}>{arcs.map((a,i)=><path key={i} d={a.path} fill={a.color+"80"}/>)}<text x={cx} y={cy+4} textAnchor="middle" fill="#6a7080" fontSize="11" fontFamily="'JetBrains Mono',monospace">{tot}</text></svg>;
 }
 
-/* ── Demo ── */
-const D={
-  stats:()=>({up:Math.floor(Math.random()*86400)+3600,tr:Math.floor(Math.random()*200)+50,tq:Math.floor(Math.random()*5),tru:Math.floor(Math.random()*3),err:Math.floor(Math.random()*10),mem:Math.round((40+Math.random()*30)*10)/10,cpu:Math.round((5+Math.random()*40)*10)/10,sch:4,wf:3}),
-  tasks:()=>[
-    {id:"task-001",name:"daily-report.rei",status:"completed",sa:Date.now()-300000,ca:Date.now()-295000,sch:"every 1h",ret:0},
-    {id:"task-002",name:"backup-sync.rei",status:"running",sa:Date.now()-60000,ca:null,sch:"every 30m",ret:0},
-    {id:"task-003",name:"health-check.rei",status:"queued",sa:null,ca:null,sch:null,ret:0},
-    {id:"task-004",name:"screenshot-audit.rei",status:"error",sa:Date.now()-120000,ca:Date.now()-118000,sch:"every 2h",ret:2,err:"Window not found: Chrome"},
-    {id:"task-005",name:"form-fill.rei",status:"completed",sa:Date.now()-600000,ca:Date.now()-595000,sch:null,ret:0},
-    {id:"task-006",name:"data-scrape.rei",status:"completed",sa:Date.now()-900000,ca:Date.now()-890000,sch:"every 4h",ret:1},
-  ],
-  logs:()=>{const lv=["info","info","info","warn","error","debug"];const ms=["Task daily-report.rei started","click (450,320)","Template match: 0.94","OCR: '売上レポート'","Completed in 4.8s","Schedule: backup-sync.rei","Window not found — retry","Watcher: auto-import.rei","WS from 192.168.1.5","Memory: 67.2 MB","GET /api/tasks","screenshot-audit failed","Daemon reload","Heartbeat: nominal"];return Array.from({length:30},(_,i)=>({ts:Date.now()-(29-i)*10000,lv:lv[Math.floor(Math.random()*lv.length)],msg:ms[Math.floor(Math.random()*ms.length)]}));},
-  hist:()=>Array.from({length:24},(_,i)=>({hour:`${String(i).padStart(2,"0")}:00`,executions:Math.floor(Math.random()*20)+2,errors:Math.floor(Math.random()*3)})),
-  keys:()=>[{key:"rei_admin_8b4e...c98f",name:"Admin Key",perm:"admin",cat:"2026-02-18",lu:"2026-02-20"},{key:"rei_read_f2a1...7d3e",name:"Monitor",perm:"read",cat:"2026-02-19",lu:"2026-02-20"},{key:"rei_exec_c4b2...9e1a",name:"CI/CD Runner",perm:"execute",cat:"2026-02-20",lu:null}],
-  nodes:()=>[{id:"node-a",name:"Alpha (本機)",host:"localhost:19720",st:"online",tasks:3,cpu:24.5,role:"leader",ls:Date.now()},{id:"node-b",name:"Beta (サーバー)",host:"192.168.1.10:19720",st:"online",tasks:5,cpu:45.2,role:"worker",ls:Date.now()-2e3},{id:"node-g",name:"Gamma (VPS)",host:"vps.example.com:19720",st:"online",tasks:2,cpu:12.8,role:"worker",ls:Date.now()-5e3},{id:"node-d",name:"Delta (テスト)",host:"192.168.1.20:19720",st:"offline",tasks:0,cpu:0,role:"worker",ls:Date.now()-36e5}],
+/* ── API Client ── */
+const api = {
+  _key: null,
+  _headers() {
+    const h = { "Content-Type": "application/json" };
+    if (this._key) h["Authorization"] = "Bearer " + this._key;
+    return h;
+  },
+  async get(path) {
+    const res = await fetch(CFG.API + path, { headers: this._headers() });
+    if (!res.ok) throw new Error(res.status + " " + res.statusText);
+    return res.json();
+  },
+  async post(path, body) {
+    const res = await fetch(CFG.API + path, {
+      method: "POST", headers: this._headers(), body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(res.status + " " + res.statusText);
+    return res.json();
+  },
+  async del(path) {
+    const res = await fetch(CFG.API + path, {
+      method: "DELETE", headers: this._headers(),
+    });
+    if (!res.ok) throw new Error(res.status + " " + res.statusText);
+    return res.json();
+  },
+  setKey(k) { this._key = k || null; },
 };
 
 /* ── Utils ── */
 const F={
-  up:s=>{const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60);return d>0?`${d}d ${h}h ${m}m`:h>0?`${h}h ${m}m`:`${m}m`;},
-  t:ts=>ts?new Date(ts).toLocaleTimeString("ja-JP",{hour:"2-digit",minute:"2-digit",second:"2-digit"}):"—",
-  ago:ts=>{if(!ts)return"—";const s=Math.floor((Date.now()-ts)/1000);if(s<60)return`${s}秒前`;if(s<3600)return`${Math.floor(s/60)}分前`;return`${Math.floor(s/3600)}時間前`;},
+  up:s=>{if(!s&&s!==0)return"\u2014";const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60);return d>0?d+"d "+h+"h "+m+"m":h>0?h+"h "+m+"m":m+"m";},
+  t:ts=>ts?new Date(ts).toLocaleTimeString("ja-JP",{hour:"2-digit",minute:"2-digit",second:"2-digit"}):"\u2014",
+  ago:ts=>{if(!ts)return"\u2014";const s=Math.floor((Date.now()-ts)/1000);if(s<60)return s+"\u79D2\u524D";if(s<3600)return Math.floor(s/60)+"\u5206\u524D";return Math.floor(s/3600)+"\u6642\u9593\u524D";},
 };
-const SC={completed:{c:"#6ee7b7",i:"Check",l:"完了"},running:{c:"#93c5fd",i:"Load",l:"実行中"},queued:{c:"#a5a5a5",i:"Clock",l:"待機"},error:{c:"#fca5a5",i:"Alert",l:"エラー"}};
+const SC={completed:{c:"#6ee7b7",i:"Check",l:"\u5B8C\u4E86"},running:{c:"#93c5fd",i:"Load",l:"\u5B9F\u884C\u4E2D"},queued:{c:"#a5a5a5",i:"Clock",l:"\u5F85\u6A5F"},error:{c:"#fca5a5",i:"Alert",l:"\u30A8\u30E9\u30FC"}};
 const LC={info:"#8ba4b8",warn:"#fbbf24",error:"#f87171",debug:"#6b7280"};
 const PC={admin:"#f0abfc",execute:"#93c5fd",read:"#a5b4c4"};
 
 /* ── Widgets ── */
-const Stat=({ic,lb,vl,sub,ac="#8ba4b8",mi})=>{const Icon=Z[ic];return<div className={`sc${mi?" mi":""}`}><div style={{width:mi?32:38,height:mi?32:38,borderRadius:8,background:ac+"12",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Icon s={mi?15:17} c={ac}/></div><div style={{minWidth:0}}><div style={{fontSize:11,color:"#5a6070",textTransform:"uppercase",letterSpacing:".06em",marginBottom:2}}>{lb}</div><div style={{fontSize:mi?18:22,fontWeight:700,color:"#d0d5de",fontFamily:"'JetBrains Mono',monospace",lineHeight:1.1}}>{vl}</div>{sub&&<div style={{fontSize:11,color:"#4a5060",marginTop:2}}>{sub}</div>}</div></div>;};
+const Stat=({ic,lb,vl,sub,ac="#8ba4b8",mi})=>{const Icon=Z[ic];return<div className={"sc"+(mi?" mi":"")}><div style={{width:mi?32:38,height:mi?32:38,borderRadius:8,background:ac+"12",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Icon s={mi?15:17} c={ac}/></div><div style={{minWidth:0}}><div style={{fontSize:11,color:"#5a6070",textTransform:"uppercase",letterSpacing:".06em",marginBottom:2}}>{lb}</div><div style={{fontSize:mi?18:22,fontWeight:700,color:"#d0d5de",fontFamily:"'JetBrains Mono',monospace",lineHeight:1.1}}>{vl}</div>{sub&&<div style={{fontSize:11,color:"#4a5060",marginTop:2}}>{sub}</div>}</div></div>;};
 const SH=({ic,tl,ac="#8ba4b8",act})=>{const Icon=Z[ic];return<div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}><div style={{display:"flex",alignItems:"center",gap:8}}><Icon s={16} c={ac}/><span style={{fontSize:14,fontWeight:600,color:"#c0c5d0",letterSpacing:".02em"}}>{tl}</span></div>{act}</div>;};
 const Bdg=({t,c})=><span style={{fontSize:10,fontWeight:600,color:c,background:c+"18",padding:"2px 8px",borderRadius:4,textTransform:"uppercase",letterSpacing:".05em"}}>{t}</span>;
 
 /* ── App ── */
 function App(){
-  const[conn,setConn]=useState(false);
+  const[connMode,setConnMode]=useState("connecting");
+  const wsRef=useRef(null);
+  const reconnRef=useRef(null);
+
+  const[st,setSt]=useState({up:0,tr:0,tq:0,tru:0,err:0,mem:0,ws:0,pid:0,cluster:null});
+  const[tasks,setTasks]=useState([]);
+  const[logs,setLogs]=useState([]);
+  const[hist,setHist]=useState([]);
+  const[keys,setKeys]=useState([]);
+  const[nodes,setNodes]=useState([]);
+  const[mh,setMh]=useState([]);
+
   const[tab,setTab]=useState("overview");
-  const[st,setSt]=useState(D.stats());
-  const[tasks,setTasks]=useState(D.tasks());
-  const[logs,setLogs]=useState(D.logs());
-  const[hist]=useState(D.hist());
-  const[keys,setKeys]=useState(D.keys());
-  const[nodes,setNodes]=useState(D.nodes());
-  const[mh,setMh]=useState(Array.from({length:30},(_,i)=>({t:i,mem:40+Math.random()*25,cpu:5+Math.random()*35})));
   const[code,setCode]=useState("");
   const[sR,setSR]=useState(false);
   const[sK,setSK]=useState(false);
@@ -166,186 +193,318 @@ function App(){
   const[et,setEt]=useState(null);
   const[dt,setDt]=useState("");
   const[dc,setDc]=useState("");
+  const[apiKey,setApiKey]=useState(function(){try{return localStorage.getItem("rei-api-key")||"";}catch(e){return"";}});
   const le=useRef(null);
 
-  useEffect(()=>{
-    setConn(true);
-    const iv=setInterval(()=>{
-      setSt(D.stats());
-      setMh(p=>[...p.slice(1),{t:p[p.length-1].t+1,mem:40+Math.random()*25,cpu:5+Math.random()*35}]);
-      setNodes(p=>p.map(n=>n.st==="online"?{...n,cpu:Math.round(Math.max(1,Math.min(95,n.cpu+Math.random()*6-3))*10)/10,tasks:Math.max(0,n.tasks+Math.floor(Math.random()*3)-1),ls:Date.now()}:n));
-      if(Math.random()>.5){const nl=D.logs().slice(-1)[0];nl.ts=Date.now();setLogs(p=>[...p.slice(-49),nl]);}
-    },3000);
-    return()=>clearInterval(iv);
+  useEffect(function(){
+    api.setKey(apiKey);
+    try{if(apiKey)localStorage.setItem("rei-api-key",apiKey);else localStorage.removeItem("rei-api-key");}catch(e){}
+  },[apiKey]);
+
+  /* ── Fetch helpers ── */
+  const fetchStats=useCallback(async function(){
+    try{
+      const d=await api.get("/health");
+      const mem=Math.round((d.memoryMB||0)*10)/10;
+      setSt({up:d.uptime||0,tr:d.completedTasks||0,tq:d.queueLength||0,tru:d.activeTasks||0,err:d.errorTasks||0,mem:mem,ws:d.wsClients||0,pid:d.pid||0,cluster:d.cluster||null});
+      setMh(function(p){var next=p.concat([{t:p.length?p[p.length-1].t+1:0,mem:mem,cpu:0}]);return next.slice(-60);});
+      return true;
+    }catch(e){return false;}
   },[]);
 
-  useEffect(()=>{if(tab==="logs")le.current?.scrollIntoView({behavior:"smooth"});},[logs,tab]);
+  const fetchTasks=useCallback(async function(){
+    try{
+      const d=await api.get("/api/tasks");
+      setTasks((d.tasks||[]).map(function(t){return{id:t.id,name:t.name,status:t.running?"running":(t.lastResult==="error"?"error":(t.lastResult==="success"?"completed":"queued")),sa:t.lastRun?new Date(t.lastRun).getTime():null,ca:t.lastResult?new Date(t.lastRun).getTime():null,sch:t.schedule||null,ret:t.errorCount||0,err:t.lastError||null};}));
+    }catch(e){}
+  },[]);
 
-  const run=()=>{if(!code.trim())return;setTasks(p=>[{id:`t-${String(Date.now()).slice(-6)}`,name:"remote-exec",status:"running",sa:Date.now(),ca:null,sch:null,ret:0},...p]);setLogs(p=>[...p,{ts:Date.now(),lv:"info",msg:"Remote task started"}]);setCode("");setSR(false);};
-  const stop=id=>setTasks(p=>p.map(t=>t.id===id?{...t,status:"completed",ca:Date.now()}:t));
-  const addKey=()=>{if(!kn.trim())return;setKeys(p=>[...p,{key:`rei_${kp}_${Math.random().toString(36).slice(2,8)}`,name:kn,perm:kp,cat:new Date().toISOString().slice(0,10),lu:null}]);setKn("");setSK(false);};
-  const delKey=k=>setKeys(p=>p.filter(x=>x.key!==k));
-  const reload=()=>setLogs(p=>[...p,{ts:Date.now(),lv:"info",msg:"Daemon reload requested"}]);
-  const dispatch=()=>{if(!dt||!dc.trim())return;const n=nodes.find(x=>x.id===dt);setLogs(p=>[...p,{ts:Date.now(),lv:"info",msg:`[9d] Dispatch → ${n?.name||dt}`}]);setTasks(p=>[{id:`d-${String(Date.now()).slice(-6)}`,name:`→ ${n?.name?.split("(")[0]||"?"}`,status:"running",sa:Date.now(),ca:null,sch:null,ret:0},...p]);setDc("");setSD(false);};
+  const fetchLogs=useCallback(async function(){
+    try{
+      const d=await api.get("/api/logs?limit=200");
+      setLogs((d.logs||[]).map(function(l){return{ts:new Date(l.timestamp).getTime(),lv:l.level,msg:l.message};}));
+    }catch(e){}
+  },[]);
 
-  const fl=lf==="all"?logs:logs.filter(l=>l.lv===lf);
-  const ts={completed:tasks.filter(t=>t.status==="completed").length,running:tasks.filter(t=>t.status==="running").length,queued:tasks.filter(t=>t.status==="queued").length,error:tasks.filter(t=>t.status==="error").length};
-  const pd=Object.entries(ts).filter(([,v])=>v>0).map(([n,v])=>({name:SC[n].l,value:v,color:SC[n].c}));
-  const on=nodes.filter(n=>n.st==="online");
-  const tnt=on.reduce((s,n)=>s+n.tasks,0);
-  const ac=on.length?Math.round(on.reduce((s,n)=>s+n.cpu,0)/on.length*10)/10:0;
+  const fetchKeys=useCallback(async function(){
+    try{
+      const d=await api.get("/api/keys");
+      setKeys((d.keys||[]).map(function(k){return{key:k.key||k.prefix||"\u2014",name:k.name,perm:(k.permissions||[]).join(","),cat:k.createdAt?new Date(k.createdAt).toISOString().slice(0,10):"\u2014",lu:k.lastUsed?new Date(k.lastUsed).toISOString().slice(0,10):null};}));
+    }catch(e){}
+  },[]);
 
-  const tabs=[{id:"overview",l:"概要",i:"Bar3"},{id:"tasks",l:"タスク",i:"Cpu"},{id:"nodes",l:"ノード",i:"Net"},{id:"logs",l:"ログ",i:"Scroll"},{id:"keys",l:"APIキー",i:"Key"},{id:"settings",l:"設定",i:"Gear"}];
+  const fetchNodes=useCallback(async function(){
+    try{
+      const d=await api.get("/api/cluster/nodes");
+      setNodes((d.nodes||[]).map(function(n){return{id:n.id,name:n.name,host:n.host,st:n.status||"online",tasks:n.stats&&n.stats.activeTasks||0,cpu:n.stats&&n.stats.cpuPercent||0,role:n.role||"worker",ls:n.lastHeartbeat||Date.now()};}));
+    }catch(e){}
+  },[]);
+
+  const buildHist=useCallback(function(logData){
+    var hours={};
+    for(var i=0;i<24;i++){var h=String(i).padStart(2,"0")+":00";hours[h]={hour:h,executions:0,errors:0};}
+    for(var j=0;j<logData.length;j++){var l=logData[j];var hr=new Date(l.ts).getHours();var hk=String(hr).padStart(2,"0")+":00";if(hours[hk]){if(l.lv==="error")hours[hk].errors++;else hours[hk].executions++;}}
+    setHist(Object.values(hours));
+  },[]);
+
+  /* ── WebSocket ── */
+  const connectWs=useCallback(function(){
+    if(wsRef.current&&wsRef.current.readyState<2)return;
+    try{
+      var ws=new WebSocket(CFG.WS+"/ws");
+      ws.onopen=function(){
+        setConnMode("ws");
+        ws.send(JSON.stringify({type:"identify",name:"dashboard-9e"}));
+        ws.send(JSON.stringify({type:"subscribe",channels:["all"]}));
+      };
+      ws.onmessage=function(ev){
+        try{
+          var msg=JSON.parse(ev.data);
+          if(msg.type==="log"&&msg.data){
+            setLogs(function(p){return p.slice(-499).concat([{ts:Date.now(),lv:msg.data.level,msg:msg.data.message}]);});
+          }else if(msg.type==="task"&&msg.data){
+            fetchTasks();
+          }else if(msg.type==="stats"&&msg.data){
+            var d=msg.data;var mem=Math.round((d.memoryMB||0)*10)/10;
+            setSt(function(prev){return Object.assign({},prev,{up:d.uptime||prev.up,tr:d.completedTasks||prev.tr,tq:d.queueLength||0,tru:d.activeTasks||0,err:d.errorTasks||prev.err,mem:mem,ws:d.wsClients||0,cluster:d.cluster||prev.cluster});});
+            setMh(function(p){return p.concat([{t:p.length?p[p.length-1].t+1:0,mem:mem,cpu:0}]).slice(-60);});
+          }
+        }catch(e){}
+      };
+      ws.onclose=function(){
+        setConnMode(function(p){return p==="ws"?"poll":p;});
+        wsRef.current=null;
+        reconnRef.current=setTimeout(connectWs,5000);
+      };
+      ws.onerror=function(){ws.close();};
+      wsRef.current=ws;
+    }catch(e){setConnMode("poll");}
+  },[fetchTasks]);
+
+  /* ── Init + Polling ── */
+  useEffect(function(){
+    var active=true;
+    var init=async function(){
+      var ok=await fetchStats();
+      if(!active)return;
+      if(ok){setConnMode("poll");connectWs();await Promise.all([fetchTasks(),fetchLogs(),fetchNodes()]);}
+      else{setConnMode("off");}
+    };
+    init();
+    var pollId=setInterval(async function(){
+      if(!active)return;
+      var ok=await fetchStats();
+      if(ok){setConnMode(function(p){return p==="off"?"poll":p;});await fetchTasks();}
+      else{setConnMode("off");}
+    },CFG.POLL);
+    return function(){active=false;clearInterval(pollId);if(reconnRef.current)clearTimeout(reconnRef.current);if(wsRef.current)wsRef.current.close();};
+  },[]);
+
+  useEffect(function(){if(tab==="logs")fetchLogs();if(tab==="keys")fetchKeys();if(tab==="nodes")fetchNodes();},[tab]);
+  useEffect(function(){if(tab==="logs"&&le.current)le.current.scrollIntoView({behavior:"smooth"});},[logs,tab]);
+  useEffect(function(){if(logs.length>0)buildHist(logs);},[logs.length]);
+
+  /* ── Actions ── */
+  var run=async function(){
+    if(!code.trim())return;
+    try{var res=await api.post("/api/tasks/run",{code:code,name:"dashboard-exec"});setLogs(function(p){return p.concat([{ts:Date.now(),lv:"info",msg:"Queued: "+(res.taskId||"remote")}]);});setCode("");setSR(false);setTimeout(fetchTasks,500);}
+    catch(e){setLogs(function(p){return p.concat([{ts:Date.now(),lv:"error",msg:"Run failed: "+e.message}]);});}
+  };
+  var stop=async function(id){
+    try{await api.post("/api/tasks/"+id+"/stop",{});setTimeout(fetchTasks,300);}
+    catch(e){setLogs(function(p){return p.concat([{ts:Date.now(),lv:"error",msg:"Stop failed: "+e.message}]);});}
+  };
+  var addKey=async function(){
+    if(!kn.trim())return;
+    try{await api.post("/api/keys",{name:kn,permissions:[kp]});setKn("");setSK(false);fetchKeys();}
+    catch(e){setLogs(function(p){return p.concat([{ts:Date.now(),lv:"error",msg:"Key create: "+e.message}]);});}
+  };
+  var delKey=async function(k){
+    try{await api.del("/api/keys/"+k);fetchKeys();}
+    catch(e){setLogs(function(p){return p.concat([{ts:Date.now(),lv:"error",msg:"Key delete: "+e.message}]);});}
+  };
+  var reload=async function(){
+    try{await api.post("/api/daemon/reload",{});setLogs(function(p){return p.concat([{ts:Date.now(),lv:"info",msg:"Daemon reload requested"}]);});}
+    catch(e){setLogs(function(p){return p.concat([{ts:Date.now(),lv:"error",msg:"Reload: "+e.message}]);});}
+  };
+  var dispatch=async function(){
+    if(!dt||!dc.trim())return;
+    try{await api.post("/api/dispatch",{code:dc,targetNodeId:dt});setLogs(function(p){return p.concat([{ts:Date.now(),lv:"info",msg:"[9d] Dispatched to "+dt}]);});setDc("");setSD(false);setTimeout(fetchTasks,500);}
+    catch(e){setLogs(function(p){return p.concat([{ts:Date.now(),lv:"error",msg:"Dispatch: "+e.message}]);});}
+  };
+
+  /* ── Computed ── */
+  var fl=lf==="all"?logs:logs.filter(function(l){return l.lv===lf;});
+  var ts={completed:tasks.filter(function(t){return t.status==="completed";}).length,running:tasks.filter(function(t){return t.status==="running";}).length,queued:tasks.filter(function(t){return t.status==="queued";}).length,error:tasks.filter(function(t){return t.status==="error";}).length};
+  var pd=Object.entries(ts).filter(function(e){return e[1]>0;}).map(function(e){return{name:SC[e[0]].l,value:e[1],color:SC[e[0]].c};});
+  var on=nodes.filter(function(n){return n.st==="online";});
+  var tnt=on.reduce(function(s,n){return s+n.tasks;},0);
+  var ac=on.length?Math.round(on.reduce(function(s,n){return s+n.cpu;},0)/on.length*10)/10:0;
+  var connLabel={ws:{c:"#6ee7b7",l:"WebSocket",dot:"ws"},poll:{c:"#fbbf24",l:"\u30DD\u30FC\u30EA\u30F3\u30B0",dot:"poll"},off:{c:"#f87171",l:"\u672A\u63A5\u7D9A",dot:"off"},connecting:{c:"#93c5fd",l:"\u63A5\u7D9A\u4E2D...",dot:"poll"}}[connMode];
+  var tabs=[{id:"overview",l:"\u6982\u8981",i:"Bar3"},{id:"tasks",l:"\u30BF\u30B9\u30AF",i:"Cpu"},{id:"nodes",l:"\u30CE\u30FC\u30C9",i:"Net"},{id:"logs",l:"\u30ED\u30B0",i:"Scroll"},{id:"keys",l:"API\u30AD\u30FC",i:"Key"},{id:"settings",l:"\u8A2D\u5B9A",i:"Gear"}];
 
   return <div style={{minHeight:"100vh",background:"#0c0e12",color:"#c0c5d0",fontFamily:"'Noto Sans JP',sans-serif"}}>
-    {/* Header */}
     <header style={{borderBottom:"1px solid #1a1d24",padding:"12px 24px",display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,zIndex:50,backdropFilter:"blur(12px)",background:"rgba(12,14,18,.85)"}}>
       <div style={{display:"flex",alignItems:"center",gap:14}}>
-        <div style={{width:32,height:32,borderRadius:8,background:"linear-gradient(135deg,#2a3040,#1a1d28)",border:"1px solid #2a2d38",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:700,color:"#8ba4b8",fontFamily:"'JetBrains Mono',monospace"}}>零</div>
-        <div><div style={{fontSize:15,fontWeight:600,color:"#d0d5de"}}>Rei Automator <span style={{fontSize:11,color:"#4a5060",fontWeight:400}}>v0.6.0</span></div><div style={{fontSize:10.5,color:"#3a4050",letterSpacing:".04em"}}>DASHBOARD — PHASE 9c + 9d</div></div>
+        <div style={{width:32,height:32,borderRadius:8,background:"linear-gradient(135deg,#2a3040,#1a1d28)",border:"1px solid #2a2d38",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:700,color:"#8ba4b8",fontFamily:"'JetBrains Mono',monospace"}}>{"\u96F6"}</div>
+        <div><div style={{fontSize:15,fontWeight:600,color:"#d0d5de"}}>Rei Automator <span style={{fontSize:11,color:"#4a5060",fontWeight:400}}>v0.6.0</span></div><div style={{fontSize:10.5,color:"#3a4050",letterSpacing:".04em"}}>DASHBOARD — PHASE 9e LIVE</div></div>
       </div>
       <div style={{display:"flex",alignItems:"center",gap:14}}>
         <div style={{display:"flex",alignItems:"center",gap:6,fontSize:12}}>
-          {conn?<><div style={{width:7,height:7,borderRadius:"50%",background:"#6ee7b7",animation:"pulse-glow 2s infinite"}}/><span style={{color:"#6ee7b7"}}>接続中</span><span style={{color:"#3a4050",fontSize:11,margin:"0 3px"}}>|</span><Z.Net s={12} c="#60a5fa"/><span style={{color:"#60a5fa"}}>{on.length}/{nodes.length}</span></>:<><Z.WOff s={13} c="#f87171"/><span style={{color:"#f87171"}}>未接続</span></>}
+          <div className={"conn-dot "+(connLabel?connLabel.dot:"off")}/><span style={{color:connLabel?connLabel.c:"#f87171"}}>{connLabel?connLabel.l:"\u672A\u63A5\u7D9A"}</span>
+          {connMode!=="off"&&connMode!=="connecting"&&<React.Fragment><span style={{color:"#3a4050",fontSize:11,margin:"0 3px"}}>|</span><span style={{color:"#4a5060",fontFamily:"'JetBrains Mono',monospace",fontSize:11}}>PID {st.pid}</span>{nodes.length>0&&<React.Fragment><span style={{color:"#3a4050",fontSize:11,margin:"0 3px"}}>|</span><Z.Net s={12} c="#60a5fa"/><span style={{color:"#60a5fa"}}>{on.length}/{nodes.length}</span></React.Fragment>}</React.Fragment>}
         </div>
-        <button className="ab p" onClick={()=>setSR(true)}><Z.Play s={12}/> 実行</button>
-        <button className="ab" onClick={()=>setSD(true)}><Z.Share s={12}/> 分配</button>
+        <button className="ab p" onClick={function(){setSR(true);}}><Z.Play s={12}/> {"\u5B9F\u884C"}</button>
+        {nodes.length>0&&<button className="ab" onClick={function(){setSD(true);}}><Z.Share s={12}/> {"\u5206\u914D"}</button>}
         <button className="ab" onClick={reload}><Z.Ref s={12}/></button>
       </div>
     </header>
 
     <nav style={{borderBottom:"1px solid #16181e",padding:"0 24px",display:"flex",gap:2}}>
-      {tabs.map(t=>{const Ic=Z[t.i];return<button key={t.id} className={`tab-btn ${tab===t.id?"active":""}`} onClick={()=>setTab(t.id)}><Ic s={14}/>{t.l}</button>;})}
+      {tabs.map(function(t){var Ic=Z[t.i];return<button key={t.id} className={"tab-btn "+(tab===t.id?"active":"")} onClick={function(){setTab(t.id);}}><Ic s={14}/>{t.l}</button>;})}
     </nav>
 
     <main style={{padding:"20px 24px",maxWidth:1280,margin:"0 auto"}}>
 
       {tab==="overview"&&<div style={{display:"flex",flexDirection:"column",gap:18,animation:"fadeIn .3s"}}>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))",gap:12}}>
-          <Stat ic="Clock" lb="稼働時間" vl={F.up(st.up)} ac="#8ba4b8"/>
-          <Stat ic="Zap" lb="実行タスク" vl={st.tr} sub={`${ts.running} 実行中`} ac="#6ee7b7"/>
-          <Stat ic="Alert" lb="エラー" vl={st.err} ac="#f87171"/>
-          <Stat ic="Cpu" lb="メモリ" vl={`${st.mem}MB`} sub={`CPU ${st.cpu}%`} ac="#a78bfa"/>
-          <Stat ic="Net" lb="ノード" vl={`${on.length}/${nodes.length}`} sub={`avg ${ac}%`} ac="#60a5fa"/>
-          <Stat ic="Share" lb="分散タスク" vl={tnt} ac="#fbbf24"/>
+          <Stat ic="Clock" lb={"\u7A3C\u50CD\u6642\u9593"} vl={F.up(st.up)} ac="#8ba4b8"/>
+          <Stat ic="Zap" lb={"\u5B8C\u4E86\u30BF\u30B9\u30AF"} vl={st.tr} sub={st.tru+" \u5B9F\u884C\u4E2D / "+st.tq+" \u5F85\u6A5F"} ac="#6ee7b7"/>
+          <Stat ic="Alert" lb={"\u30A8\u30E9\u30FC"} vl={st.err} ac="#f87171"/>
+          <Stat ic="Cpu" lb={"\u30E1\u30E2\u30EA"} vl={st.mem+"MB"} sub={"WS "+st.ws+"\u63A5\u7D9A"} ac="#a78bfa"/>
+          {nodes.length>0&&<Stat ic="Net" lb={"\u30CE\u30FC\u30C9"} vl={on.length+"/"+nodes.length} sub={"avg "+ac+"%"} ac="#60a5fa"/>}
+          {tnt>0&&<Stat ic="Share" lb={"\u5206\u6563\u30BF\u30B9\u30AF"} vl={tnt} ac="#fbbf24"/>}
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
-          <div className="pn"><SH ic="Bar3" tl="実行履歴（24時間）" ac="#6ee7b7"/><BarSVG data={hist}/></div>
-          <div className="pn"><SH ic="Activity" tl="リソース使用量" ac="#a78bfa"/><AreaSVG data={mh}/></div>
+          <div className="pn"><SH ic="Bar3" tl={"\u5B9F\u884C\u5C65\u6B74\uFF0824\u6642\u9593\uFF09"} ac="#6ee7b7"/>{hist.length>0?<BarSVG data={hist}/>:<div style={{color:"#2a2d38",fontSize:12,textAlign:"center",padding:40}}>{"\u30ED\u30B0\u30C7\u30FC\u30BF\u306A\u3057"}</div>}</div>
+          <div className="pn"><SH ic="Activity" tl={"\u30E1\u30E2\u30EA\u4F7F\u7528\u91CF"} ac="#a78bfa"/>{mh.length>1?<AreaSVG data={mh} keys={[{k:"mem",c:"#a78bfa",l:"Memory (MB)"}]} mx={Math.max(100,Math.max.apply(null,mh.map(function(d){return d.mem||0;}))*1.2)||100}/>:<div style={{color:"#2a2d38",fontSize:12,textAlign:"center",padding:40}}>{"\u53CE\u96C6\u4E2D..."}</div>}</div>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"260px 1fr",gap:14}}>
-          <div className="pn"><SH ic="Cpu" tl="タスク状況" ac="#93c5fd"/><div style={{display:"flex",justifyContent:"center",marginBottom:10}}><Donut data={pd}/></div>
-            <div style={{display:"flex",flexDirection:"column",gap:6}}>{Object.entries(SC).map(([k,v])=><div key={k} style={{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:12}}><div style={{display:"flex",alignItems:"center",gap:6}}><div style={{width:8,height:8,borderRadius:2,background:v.c+"80"}}/><span style={{color:"#6a7080"}}>{v.l}</span></div><span style={{color:v.c,fontFamily:"'JetBrains Mono',monospace",fontWeight:600}}>{ts[k]}</span></div>)}</div>
+          <div className="pn"><SH ic="Cpu" tl={"\u30BF\u30B9\u30AF\u72B6\u6CC1"} ac="#93c5fd"/><div style={{display:"flex",justifyContent:"center",marginBottom:10}}><Donut data={pd.length>0?pd:[{name:"\u306A\u3057",value:1,color:"#2a2d38"}]}/></div>
+            <div style={{display:"flex",flexDirection:"column",gap:6}}>{Object.entries(SC).map(function(e){return<div key={e[0]} style={{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:12}}><div style={{display:"flex",alignItems:"center",gap:6}}><div style={{width:8,height:8,borderRadius:2,background:e[1].c+"80"}}/><span style={{color:"#6a7080"}}>{e[1].l}</span></div><span style={{color:e[1].c,fontFamily:"'JetBrains Mono',monospace",fontWeight:600}}>{ts[e[0]]}</span></div>;})}</div>
           </div>
-          <div className="pn"><SH ic="Scroll" tl="最新ログ" ac="#8ba4b8" act={<button className="ab" onClick={()=>setTab("logs")} style={{fontSize:11}}>全て →</button>}/>
-            <div style={{maxHeight:200,overflowY:"auto",fontFamily:"'JetBrains Mono',monospace"}}>{logs.slice(-10).map((l,i)=><div key={i} className="ll" style={{opacity:.5+(i/10)*.5}}><span style={{color:"#2a2d38",flexShrink:0}}>{F.t(l.ts)}</span><span style={{color:LC[l.lv]||"#6b7280",flexShrink:0,width:40,textAlign:"right"}}>{l.lv}</span><span style={{color:"#8a90a0"}}>{l.msg}</span></div>)}</div>
+          <div className="pn"><SH ic="Scroll" tl={"\u6700\u65B0\u30ED\u30B0"} ac="#8ba4b8" act={<button className="ab" onClick={function(){setTab("logs");}} style={{fontSize:11}}>{"\u5168\u3066 \u2192"}</button>}/>
+            <div style={{maxHeight:200,overflowY:"auto",fontFamily:"'JetBrains Mono',monospace"}}>{logs.length>0?logs.slice(-10).map(function(l,i){return<div key={i} className="ll" style={{opacity:.5+(i/10)*.5}}><span style={{color:"#22252e",flexShrink:0}}>{F.t(l.ts)}</span><span style={{color:LC[l.lv]||"#6b7280",flexShrink:0,width:40,textAlign:"right"}}>{l.lv}</span><span style={{color:"#8a90a0"}}>{l.msg}</span></div>;}):<div style={{color:"#2a2d38",fontSize:12,textAlign:"center",padding:20}}>{"\u30ED\u30B0\u306A\u3057"}</div>}</div>
           </div>
         </div>
       </div>}
 
       {tab==="tasks"&&<div style={{animation:"fadeIn .3s"}}><div className="pn">
-        <SH ic="Cpu" tl="タスク一覧" ac="#93c5fd" act={<div style={{display:"flex",gap:8}}><button className="ab p" onClick={()=>setSR(true)}><Z.Play s={12}/> 新規</button><button className="ab" onClick={()=>setSD(true)}><Z.Share s={12}/> 分配</button></div>}/>
-        <div style={{display:"grid",gridTemplateColumns:"32px 1fr 80px 120px 80px 60px",gap:10,padding:"6px 12px",fontSize:11,color:"#3a4050",borderBottom:"1px solid #1a1d24",textTransform:"uppercase",letterSpacing:".06em"}}><span/><span>タスク</span><span>状態</span><span>時刻</span><span>予約</span><span/></div>
-        {tasks.map(t=>{const c=SC[t.status]||SC.queued;const Ic=Z[c.i];return<div key={t.id}>
-          <div className="tr" onClick={()=>setEt(et===t.id?null:t.id)}>
+        <SH ic="Cpu" tl={"\u30BF\u30B9\u30AF\u4E00\u89A7"} ac="#93c5fd" act={<div style={{display:"flex",gap:8}}><button className="ab p" onClick={function(){setSR(true);}}><Z.Play s={12}/> {"\u65B0\u898F"}</button>{nodes.length>0&&<button className="ab" onClick={function(){setSD(true);}}><Z.Share s={12}/> {"\u5206\u914D"}</button>}</div>}/>
+        <div style={{display:"grid",gridTemplateColumns:"32px 1fr 80px 120px 80px 60px",gap:10,padding:"6px 12px",fontSize:11,color:"#3a4050",borderBottom:"1px solid #1a1d24",textTransform:"uppercase",letterSpacing:".06em"}}><span/><span>{"\u30BF\u30B9\u30AF"}</span><span>{"\u72B6\u614B"}</span><span>{"\u6642\u523B"}</span><span>{"\u4E88\u7D04"}</span><span/></div>
+        {tasks.length>0?tasks.map(function(t){var c=SC[t.status]||SC.queued;var Ic=Z[c.i];return<div key={t.id}>
+          <div className="tr" onClick={function(){setEt(et===t.id?null:t.id);}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"center"}}><Ic s={15} c={c.c}/></div>
             <div><div style={{fontSize:13,color:"#c0c8d4",fontWeight:500}}>{t.name}</div><div style={{fontSize:11,color:"#3a4050",fontFamily:"'JetBrains Mono',monospace"}}>{t.id}</div></div>
             <Bdg t={c.l} c={c.c}/>
             <div style={{fontSize:12,color:"#5a6070",fontFamily:"'JetBrains Mono',monospace"}}>{F.t(t.sa)}</div>
-            <div style={{fontSize:11,color:t.sch?"#fbbf24":"#2a2d38"}}>{t.sch||"—"}</div>
-            <div style={{display:"flex",gap:4}}>{t.status==="running"&&<button className="ab d" style={{padding:"4px 6px"}} onClick={e=>{e.stopPropagation();stop(t.id);}}><Z.Sq s={11}/></button>}{et===t.id?<Z.CDown s={14} c="#4a5060"/>:<Z.CRight s={14} c="#2a2d38"/>}</div>
+            <div style={{fontSize:11,color:t.sch?"#fbbf24":"#2a2d38"}}>{t.sch||"\u2014"}</div>
+            <div style={{display:"flex",gap:4}}>{t.status==="running"&&<button className="ab d" style={{padding:"4px 6px"}} onClick={function(e){e.stopPropagation();stop(t.id);}}><Z.Sq s={11}/></button>}{et===t.id?<Z.CDown s={14} c="#4a5060"/>:<Z.CRight s={14} c="#2a2d38"/>}</div>
           </div>
           {et===t.id&&<div style={{padding:"10px 12px 10px 54px",fontSize:12,color:"#5a6070",background:"rgba(139,164,184,.02)",borderBottom:"1px solid #16181e",animation:"fadeIn .2s"}}>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}><div>開始: {F.t(t.sa)}</div><div>完了: {F.t(t.ca)}</div><div>リトライ: {t.ret}回</div></div>
-            {t.err&&<div style={{marginTop:6,color:"#f87171",fontFamily:"'JetBrains Mono',monospace",fontSize:11}}>⚠ {t.err}</div>}
+            <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}><div>{"\u958B\u59CB: "}{F.t(t.sa)}</div><div>{"\u5B8C\u4E86: "}{F.t(t.ca)}</div><div>{"\u30EA\u30C8\u30E9\u30A4: "}{t.ret}{"\u56DE"}</div></div>
+            {t.err&&<div style={{marginTop:6,color:"#f87171",fontFamily:"'JetBrains Mono',monospace",fontSize:11}}>{"\u26A0 "}{t.err}</div>}
           </div>}
-        </div>;})}
+        </div>;}):<div style={{color:"#3a4050",fontSize:13,textAlign:"center",padding:40}}>{"\u30BF\u30B9\u30AF\u306A\u3057 \u2014 \u300C\u65B0\u898F\u300D\u30DC\u30BF\u30F3\u3067\u30BF\u30B9\u30AF\u3092\u5B9F\u884C\u3067\u304D\u307E\u3059"}</div>}
       </div></div>}
 
       {tab==="nodes"&&<div style={{animation:"fadeIn .3s",display:"flex",flexDirection:"column",gap:16}}>
+        {nodes.length===0?<div className="pn" style={{textAlign:"center",padding:40,color:"#3a4050"}}><Z.Net s={24} c="#2a2d38"/><div style={{marginTop:12,fontSize:13}}>{"\u30AF\u30E9\u30B9\u30BF\u304C\u7121\u52B9\u304B\u3001\u30CE\u30FC\u30C9\u60C5\u5831\u304C\u3042\u308A\u307E\u305B\u3093"}</div><div style={{fontSize:11,color:"#2a2d38",marginTop:4}}>{"clusterEnabled: true \u3067\u6709\u52B9\u5316"}</div></div>:<React.Fragment>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))",gap:12}}>
-          <Stat ic="Srv" lb="総ノード" vl={nodes.length} sub={`${on.length} オンライン`} ac="#60a5fa"/>
-          <Stat ic="Zap" lb="分散タスク" vl={tnt} ac="#6ee7b7"/>
-          <Stat ic="Cpu" lb="平均CPU" vl={`${ac}%`} ac="#a78bfa"/>
-          <Stat ic="Globe" lb="リーダー" vl={nodes.find(n=>n.role==="leader")?.name?.split(" ")[0]||"—"} ac="#fbbf24"/>
+          <Stat ic="Srv" lb={"\u7DCF\u30CE\u30FC\u30C9"} vl={nodes.length} sub={on.length+" \u30AA\u30F3\u30E9\u30A4\u30F3"} ac="#60a5fa"/>
+          <Stat ic="Zap" lb={"\u5206\u6563\u30BF\u30B9\u30AF"} vl={tnt} ac="#6ee7b7"/>
+          <Stat ic="Cpu" lb={"\u5E73\u5747CPU"} vl={ac+"%"} ac="#a78bfa"/>
+          <Stat ic="Globe" lb={"\u30EA\u30FC\u30C0\u30FC"} vl={(function(){var n=nodes.find(function(n){return n.role==="leader";});return n?n.name.split(" ")[0]:"\u2014";})()  } ac="#fbbf24"/>
         </div>
-        <div className="pn"><SH ic="Net" tl="トポロジー" ac="#60a5fa"/>
+        <div className="pn"><SH ic="Net" tl={"\u30C8\u30DD\u30ED\u30B8\u30FC"} ac="#60a5fa"/>
           <div style={{display:"flex",justifyContent:"center",gap:24,padding:"20px 0",flexWrap:"wrap"}}>
-            {nodes.map(n=>{const isL=n.role==="leader",isO=n.st==="online",ac=isL?"#fbbf24":isO?"#6ee7b7":"#f87171";
+            {nodes.map(function(n){var isL=n.role==="leader",isO=n.st==="online",nac=isL?"#fbbf24":isO?"#6ee7b7":"#f87171";
               return<div key={n.id} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:8}}>
-                <div style={{position:"relative"}}><div style={{width:72,height:72,borderRadius:14,background:`linear-gradient(135deg,${ac}08,${ac}04)`,border:`1.5px solid ${ac}${isO?"40":"15"}`,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}><Z.Srv s={20} c={ac}/><div style={{fontSize:9,color:ac,marginTop:4,fontWeight:600}}>{isL?"LEADER":"WORKER"}</div></div><div style={{position:"absolute",top:-3,right:-3,width:10,height:10,borderRadius:"50%",background:isO?"#6ee7b7":"#f87171",border:"2px solid #0c0e12",animation:isO?"pulse-glow 2s infinite":"none"}}/></div>
-                <div style={{textAlign:"center"}}><div style={{fontSize:12,color:"#c0c8d4",fontWeight:500}}>{n.name.split("(")[0].trim()}</div><div style={{fontSize:10,color:"#4a5060",fontFamily:"'JetBrains Mono',monospace"}}>{n.host}</div>{isO&&<div style={{fontSize:10,color:"#3a4050",marginTop:2}}>CPU {n.cpu}% · {n.tasks}タスク</div>}</div>
+                <div style={{position:"relative"}}><div style={{width:72,height:72,borderRadius:14,background:"linear-gradient(135deg,"+nac+"08,"+nac+"04)",border:"1.5px solid "+nac+(isO?"40":"15"),display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}><Z.Srv s={20} c={nac}/><div style={{fontSize:9,color:nac,marginTop:4,fontWeight:600}}>{isL?"LEADER":"WORKER"}</div></div><div style={{position:"absolute",top:-3,right:-3,width:10,height:10,borderRadius:"50%",background:isO?"#6ee7b7":"#f87171",border:"2px solid #0c0e12",animation:isO?"pulse-glow 2s infinite":"none"}}/></div>
+                <div style={{textAlign:"center"}}><div style={{fontSize:12,color:"#c0c8d4",fontWeight:500}}>{n.name.split("(")[0].trim()}</div><div style={{fontSize:10,color:"#4a5060",fontFamily:"'JetBrains Mono',monospace"}}>{n.host}</div>{isO&&<div style={{fontSize:10,color:"#3a4050",marginTop:2}}>{"CPU "+n.cpu+"% \u00B7 "+n.tasks+"\u30BF\u30B9\u30AF"}</div>}</div>
               </div>;})}
           </div>
-          <div style={{textAlign:"center",fontSize:11,color:"#2a2d38",marginTop:4}}>── REST API :19720 相互通信 ──</div>
+          <div style={{textAlign:"center",fontSize:11,color:"#2a2d38",marginTop:4}}>{"\u2500\u2500 REST API :19720 \u76F8\u4E92\u901A\u4FE1 \u2500\u2500"}</div>
         </div>
-        <div className="pn"><SH ic="Srv" tl="ノード一覧" ac="#60a5fa" act={<button className="ab" onClick={()=>setSD(true)}><Z.Share s={12}/> 分配</button>}/>
-          <div style={{display:"grid",gridTemplateColumns:"32px 1fr 90px 100px 80px 100px",gap:10,padding:"6px 12px",fontSize:11,color:"#3a4050",borderBottom:"1px solid #1a1d24",textTransform:"uppercase"}}><span/><span>名前</span><span>状態</span><span>タスク</span><span>CPU</span><span>応答</span></div>
-          {nodes.map(n=>{const nc=n.st==="online"?{c:"#6ee7b7",l:"稼働中"}:{c:"#f87171",l:"停止"};return<div key={n.id} className="nr"><div style={{display:"flex",alignItems:"center",justifyContent:"center"}}><Z.Srv s={15} c={nc.c}/></div><div><div style={{fontSize:13,color:"#c0c8d4",fontWeight:500}}>{n.name} {n.role==="leader"&&<Bdg t="Leader" c="#fbbf24"/>}</div><div style={{fontSize:11,color:"#3a4050",fontFamily:"'JetBrains Mono',monospace"}}>{n.host}</div></div><Bdg t={nc.l} c={nc.c}/><div style={{fontSize:13,color:"#c0c8d4",fontFamily:"'JetBrains Mono',monospace"}}>{n.tasks}</div><div style={{fontSize:12,color:n.cpu>70?"#f87171":n.cpu>40?"#fbbf24":"#6ee7b7",fontFamily:"'JetBrains Mono',monospace"}}>{n.st==="online"?`${n.cpu}%`:"—"}</div><div style={{fontSize:11,color:"#4a5060"}}>{F.ago(n.ls)}</div></div>;})}
+        <div className="pn"><SH ic="Srv" tl={"\u30CE\u30FC\u30C9\u4E00\u89A7"} ac="#60a5fa" act={<button className="ab" onClick={function(){setSD(true);}}><Z.Share s={12}/> {"\u5206\u914D"}</button>}/>
+          <div style={{display:"grid",gridTemplateColumns:"32px 1fr 90px 100px 80px 100px",gap:10,padding:"6px 12px",fontSize:11,color:"#3a4050",borderBottom:"1px solid #1a1d24",textTransform:"uppercase"}}><span/><span>{"\u540D\u524D"}</span><span>{"\u72B6\u614B"}</span><span>{"\u30BF\u30B9\u30AF"}</span><span>CPU</span><span>{"\u5FDC\u7B54"}</span></div>
+          {nodes.map(function(n){var nc=n.st==="online"?{c:"#6ee7b7",l:"\u7A3C\u50CD\u4E2D"}:{c:"#f87171",l:"\u505C\u6B62"};return<div key={n.id} className="nr"><div style={{display:"flex",alignItems:"center",justifyContent:"center"}}><Z.Srv s={15} c={nc.c}/></div><div><div style={{fontSize:13,color:"#c0c8d4",fontWeight:500}}>{n.name} {n.role==="leader"&&<Bdg t="Leader" c="#fbbf24"/>}</div><div style={{fontSize:11,color:"#3a4050",fontFamily:"'JetBrains Mono',monospace"}}>{n.host}</div></div><Bdg t={nc.l} c={nc.c}/><div style={{fontSize:13,color:"#c0c8d4",fontFamily:"'JetBrains Mono',monospace"}}>{n.tasks}</div><div style={{fontSize:12,color:n.cpu>70?"#f87171":n.cpu>40?"#fbbf24":"#6ee7b7",fontFamily:"'JetBrains Mono',monospace"}}>{n.st==="online"?n.cpu+"%":"\u2014"}</div><div style={{fontSize:11,color:"#4a5060"}}>{F.ago(n.ls)}</div></div>;})}
         </div>
-        <div className="pn"><SH ic="Share" tl="分配戦略" ac="#fbbf24"/>
+        <div className="pn"><SH ic="Share" tl={"\u5206\u914D\u6226\u7565"} ac="#fbbf24"/>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:14}}>
-            {[{n:"Round Robin",d:"順番に均等分配",a:true},{n:"Least Load",d:"負荷最小ノード優先",a:false},{n:"Affinity",d:"タスク→ノード固定",a:false}].map(s=><div key={s.n} style={{padding:"14px 16px",borderRadius:10,background:s.a?"rgba(251,191,36,.06)":"rgba(139,164,184,.03)",border:`1px solid ${s.a?"#fbbf2430":"#1e2028"}`,cursor:"pointer"}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}><span style={{fontSize:13,fontWeight:600,color:s.a?"#fbbf24":"#6a7080"}}>{s.n}</span>{s.a&&<Bdg t="有効" c="#fbbf24"/>}</div><div style={{fontSize:11.5,color:"#4a5060"}}>{s.d}</div></div>)}
+            {[{n:"Round Robin",d:"\u9806\u756A\u306B\u5747\u7B49\u5206\u914D",a:true},{n:"Least Load",d:"\u8CA0\u8377\u6700\u5C0F\u30CE\u30FC\u30C9\u512A\u5148",a:false},{n:"Affinity",d:"\u30BF\u30B9\u30AF\u2192\u30CE\u30FC\u30C9\u56FA\u5B9A",a:false}].map(function(s){return<div key={s.n} style={{padding:"14px 16px",borderRadius:10,background:s.a?"rgba(251,191,36,.06)":"rgba(139,164,184,.03)",border:"1px solid "+(s.a?"#fbbf2430":"#1e2028"),cursor:"pointer"}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}><span style={{fontSize:13,fontWeight:600,color:s.a?"#fbbf24":"#6a7080"}}>{s.n}</span>{s.a&&<Bdg t={"\u6709\u52B9"} c="#fbbf24"/>}</div><div style={{fontSize:11.5,color:"#4a5060"}}>{s.d}</div></div>;})}
           </div>
         </div>
+        </React.Fragment>}
       </div>}
 
       {tab==="logs"&&<div style={{animation:"fadeIn .3s"}}><div className="pn" style={{height:"calc(100vh - 180px)",display:"flex",flexDirection:"column"}}>
-        <SH ic="Scroll" tl="リアルタイムログ" ac="#8ba4b8" act={<div style={{display:"flex",gap:4}}>{["all","info","warn","error","debug"].map(v=><button key={v} className={`ab ${lf===v?"p":""}`} onClick={()=>setLf(v)} style={{fontSize:11,padding:"4px 8px"}}>{v==="all"?"全て":v}</button>)}</div>}/>
+        <SH ic="Scroll" tl={"\u30EA\u30A2\u30EB\u30BF\u30A4\u30E0\u30ED\u30B0"} ac="#8ba4b8" act={<div style={{display:"flex",gap:4}}>{["all","info","warn","error","debug"].map(function(v){return<button key={v} className={"ab "+(lf===v?"p":"")} onClick={function(){setLf(v);}} style={{fontSize:11,padding:"4px 8px"}}>{v==="all"?"\u5168\u3066":v}</button>;})}</div>}/>
         <div style={{flex:1,overflowY:"auto",fontFamily:"'JetBrains Mono',monospace",background:"#0a0c10",borderRadius:8,padding:"10px 14px",border:"1px solid #16181e"}}>
-          {fl.map((l,i)=><div key={i} className="ll"><span style={{color:"#22252e",flexShrink:0,fontSize:11}}>{F.t(l.ts)}</span><span style={{color:LC[l.lv]||"#6b7280",flexShrink:0,width:44,textAlign:"right",fontSize:11,fontWeight:600}}>{l.lv}</span><span style={{color:"#8a90a0",fontSize:12}}>{l.msg}</span></div>)}
+          {fl.length>0?fl.map(function(l,i){return<div key={i} className="ll"><span style={{color:"#22252e",flexShrink:0,fontSize:11}}>{F.t(l.ts)}</span><span style={{color:LC[l.lv]||"#6b7280",flexShrink:0,width:44,textAlign:"right",fontSize:11,fontWeight:600}}>{l.lv}</span><span style={{color:"#8a90a0",fontSize:12}}>{l.msg}</span></div>;}):<div style={{color:"#2a2d38",fontSize:12,textAlign:"center",padding:40}}>{"\u30ED\u30B0\u306A\u3057"}</div>}
           <div ref={le}/>
         </div>
       </div></div>}
 
       {tab==="keys"&&<div style={{animation:"fadeIn .3s"}}><div className="pn">
-        <SH ic="Key" tl="APIキー管理" ac="#f0abfc" act={<button className="ab p" onClick={()=>setSK(true)}><Z.Plus s={12}/> 新規</button>}/>
-        <div className="kr" style={{fontSize:11,color:"#3a4050",textTransform:"uppercase",borderBottom:"1px solid #1a1d24"}}><span>名前</span><span>キー</span><span>権限</span><span>作成日</span><span>最終</span><span/></div>
-        {keys.map(k=><div key={k.key} className="kr"><div style={{fontSize:13,color:"#c0c8d4",fontWeight:500}}>{k.name}</div><div style={{fontSize:12,color:"#4a5060",fontFamily:"'JetBrains Mono',monospace"}}>{k.key}</div><Bdg t={k.perm} c={PC[k.perm]}/><div style={{fontSize:12,color:"#4a5060"}}>{k.cat}</div><div style={{fontSize:12,color:"#4a5060"}}>{k.lu||"—"}</div><button className="ab d" style={{padding:"4px 6px"}} onClick={()=>delKey(k.key)}><Z.Trash s={12}/></button></div>)}
+        <SH ic="Key" tl={"API\u30AD\u30FC\u7BA1\u7406"} ac="#f0abfc" act={<button className="ab p" onClick={function(){setSK(true);}}><Z.Plus s={12}/> {"\u65B0\u898F"}</button>}/>
+        <div className="kr" style={{fontSize:11,color:"#3a4050",textTransform:"uppercase",borderBottom:"1px solid #1a1d24"}}><span>{"\u540D\u524D"}</span><span>{"\u30AD\u30FC"}</span><span>{"\u6A29\u9650"}</span><span>{"\u4F5C\u6210\u65E5"}</span><span>{"\u6700\u7D42"}</span><span/></div>
+        {keys.length>0?keys.map(function(k){return<div key={k.key} className="kr"><div style={{fontSize:13,color:"#c0c8d4",fontWeight:500}}>{k.name}</div><div style={{fontSize:12,color:"#4a5060",fontFamily:"'JetBrains Mono',monospace"}}>{k.key}</div><Bdg t={k.perm} c={PC[k.perm&&k.perm.split(",")[0]]||"#a5b4c4"}/><div style={{fontSize:12,color:"#4a5060"}}>{k.cat}</div><div style={{fontSize:12,color:"#4a5060"}}>{k.lu||"\u2014"}</div><button className="ab d" style={{padding:"4px 6px"}} onClick={function(){delKey(k.key);}}><Z.Trash s={12}/></button></div>;}):<div style={{color:"#3a4050",fontSize:12,textAlign:"center",padding:30}}>{"admin\u6A29\u9650\u306EAPI\u30AD\u30FC\u3067\u8A8D\u8A3C\u3059\u308B\u3068\u8868\u793A\u3055\u308C\u307E\u3059"}</div>}
       </div></div>}
 
       {tab==="settings"&&<div style={{animation:"fadeIn .3s",display:"flex",flexDirection:"column",gap:14}}>
-        <div className="pn"><SH ic="Srv" tl="接続設定" ac="#60a5fa"/>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
-            <div><div style={{fontSize:11,color:"#4a5060",marginBottom:6}}>API</div><div style={{fontSize:13,color:"#8a90a0",fontFamily:"'JetBrains Mono',monospace",background:"#0a0c10",padding:"8px 12px",borderRadius:6,border:"1px solid #1a1d24"}}>{CFG.API}</div></div>
-            <div><div style={{fontSize:11,color:"#4a5060",marginBottom:6}}>WebSocket</div><div style={{fontSize:13,color:"#8a90a0",fontFamily:"'JetBrains Mono',monospace",background:"#0a0c10",padding:"8px 12px",borderRadius:6,border:"1px solid #1a1d24"}}>{CFG.WS}</div></div>
+        <div className="pn"><SH ic="Key" tl={"API\u8A8D\u8A3C"} ac="#f0abfc"/>
+          <div style={{marginBottom:14}}>
+            <div style={{fontSize:11,color:"#4a5060",marginBottom:6}}>{"API\u30AD\u30FC\uFF08Bearer\u8A8D\u8A3C\uFF09"}</div>
+            <div style={{display:"flex",gap:8}}>
+              <input value={apiKey} onChange={function(e){setApiKey(e.target.value);}} placeholder="rei_xxxxxx..." type="password" style={{flex:1,background:"#0a0c10",border:"1px solid #1e2028",borderRadius:6,padding:"8px 12px",color:"#c0c8d4",fontSize:13,fontFamily:"'JetBrains Mono',monospace"}}/>
+              <button className="ab" onClick={function(){setApiKey("");}} style={{fontSize:11}}>{"\u30AF\u30EA\u30A2"}</button>
+            </div>
+            <div style={{fontSize:10.5,color:"#2a2d38",marginTop:6}}>{"\u8A2D\u5B9A\u3059\u308B\u3068read/execute/admin API\u306B\u8A8D\u8A3C\u4ED8\u304D\u3067\u30A2\u30AF\u30BB\u30B9\u3057\u307E\u3059\u3002\u30D6\u30E9\u30A6\u30B6\u306B\u4FDD\u5B58\u3055\u308C\u307E\u3059\u3002"}</div>
           </div>
         </div>
-        <div className="pn"><SH ic="Activity" tl="デーモン情報" ac="#6ee7b7"/>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12}}><Stat mi ic="Clock" lb="稼働時間" vl={F.up(st.up)} ac="#8ba4b8"/><Stat mi ic="Cpu" lb="キュー" vl={st.tq} ac="#93c5fd"/><Stat mi ic="Eye" lb="監視" vl={st.wf} ac="#60a5fa"/></div>
-          <div style={{marginTop:14}}><button className="ab" onClick={reload}><Z.Ref s={12}/> リロード</button></div>
+        <div className="pn"><SH ic="Srv" tl={"\u63A5\u7D9A\u8A2D\u5B9A"} ac="#60a5fa"/>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+            <div><div style={{fontSize:11,color:"#4a5060",marginBottom:6}}>API</div><div style={{fontSize:13,color:"#8a90a0",fontFamily:"'JetBrains Mono',monospace",background:"#0a0c10",padding:"8px 12px",borderRadius:6,border:"1px solid #1a1d24"}}>{CFG.API}</div></div>
+            <div><div style={{fontSize:11,color:"#4a5060",marginBottom:6}}>WebSocket</div><div style={{fontSize:13,color:"#8a90a0",fontFamily:"'JetBrains Mono',monospace",background:"#0a0c10",padding:"8px 12px",borderRadius:6,border:"1px solid #1a1d24"}}>{CFG.WS+"/ws"}</div></div>
+          </div>
+          <div style={{marginTop:10,display:"flex",alignItems:"center",gap:8}}><div className={"conn-dot "+(connLabel?connLabel.dot:"off")}/><span style={{fontSize:12,color:connLabel?connLabel.c:"#f87171"}}>{connLabel?connLabel.l:""}</span>{connMode==="ws"&&<Bdg t={"\u30EA\u30A2\u30EB\u30BF\u30A4\u30E0"} c="#6ee7b7"/>}{connMode==="poll"&&<Bdg t={CFG.POLL/1000+"\u79D2\u9593\u9694"} c="#fbbf24"/>}</div>
+        </div>
+        <div className="pn"><SH ic="Activity" tl={"\u30C7\u30FC\u30E2\u30F3\u60C5\u5831"} ac="#6ee7b7"/>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12}}><Stat mi ic="Clock" lb={"\u7A3C\u50CD\u6642\u9593"} vl={F.up(st.up)} ac="#8ba4b8"/><Stat mi ic="Cpu" lb={"\u30AD\u30E5\u30FC"} vl={st.tq} ac="#93c5fd"/><Stat mi ic="Eye" lb={"\u76E3\u8996\u5BFE\u8C61"} vl={st.wf||0} ac="#60a5fa"/></div>
+          <div style={{marginTop:14,display:"flex",gap:8}}><button className="ab" onClick={reload}><Z.Ref s={12}/> {"\u30EA\u30ED\u30FC\u30C9"}</button><button className="ab" onClick={function(){fetchStats();fetchTasks();fetchLogs();fetchNodes();fetchKeys();}}><Z.Ref s={12}/> {"\u5168\u53D6\u5F97"}</button></div>
         </div>
         <div className="pn"><SH ic="Zap" tl="Rei-AIOS" ac="#fbbf24"/>
           <div style={{fontSize:12.5,color:"#5a6070",lineHeight:1.8}}>
-            <div style={{marginBottom:4}}>🌌 Layer 0: 宇宙図書館</div><div style={{marginBottom:4}}>⭐ Layer 1: Rei（公理・理論）</div>
-            <div style={{marginBottom:4}}><span style={{color:"#fbbf24"}}>🤖 Layer 2: Rei-AIOS（実装）</span> <Bdg t="現在地" c="#fbbf24"/></div>
+            <div style={{marginBottom:4}}>{"\uD83C\uDF0C Layer 0: \u5B87\u5B99\u56F3\u66F8\u9928"}</div><div style={{marginBottom:4}}>{"\u2B50 Layer 1: Rei\uFF08\u516C\u7406\u30FB\u7406\u8AD6\uFF09"}</div>
+            <div style={{marginBottom:4}}><span style={{color:"#fbbf24"}}>{"\uD83E\uDD16 Layer 2: Rei-AIOS\uFF08\u5B9F\u88C5\uFF09"}</span> <Bdg t={"\u73FE\u5728\u5730"} c="#fbbf24"/></div>
             <div style={{marginTop:10,padding:"10px 14px",background:"#0a0c10",borderRadius:8,border:"1px solid #1a1d24",fontStyle:"italic",color:"#6a7080"}}>"AI is not an app. AI is a participant."</div>
           </div>
         </div>
       </div>}
     </main>
 
-    {sR&&<div className="mo" onClick={()=>setSR(false)}><div className="mc" onClick={e=>e.stopPropagation()}>
-      <div style={{display:"flex",justifyContent:"space-between",marginBottom:16}}><span style={{fontSize:15,fontWeight:600,color:"#d0d5de"}}>タスク実行</span><button className="ab" style={{padding:"4px 6px"}} onClick={()=>setSR(false)}><Z.X s={14}/></button></div>
-      <textarea value={code} onChange={e=>setCode(e.target.value)} placeholder={"クリック 500 300\n待機 1000"} rows={7} style={{width:"100%",background:"#0a0c10",border:"1px solid #1e2028",borderRadius:8,padding:"10px 14px",color:"#c0c8d4",fontSize:13,resize:"vertical",fontFamily:"'JetBrains Mono',monospace",lineHeight:1.6}}/>
-      <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginTop:14}}><button className="ab" onClick={()=>setSR(false)}>取消</button><button className="ab p" onClick={run}><Z.Send s={12}/> 実行</button></div>
+    {sR&&<div className="mo" onClick={function(){setSR(false);}}><div className="mc" onClick={function(e){e.stopPropagation();}}>
+      <div style={{display:"flex",justifyContent:"space-between",marginBottom:16}}><span style={{fontSize:15,fontWeight:600,color:"#d0d5de"}}>{"\u30BF\u30B9\u30AF\u5B9F\u884C"}</span><button className="ab" style={{padding:"4px 6px"}} onClick={function(){setSR(false);}}><Z.X s={14}/></button></div>
+      <textarea value={code} onChange={function(e){setCode(e.target.value);}} placeholder={"click 500 300\nwait 1000\ntype \"hello\""} rows={7} style={{width:"100%",background:"#0a0c10",border:"1px solid #1e2028",borderRadius:8,padding:"10px 14px",color:"#c0c8d4",fontSize:13,resize:"vertical",fontFamily:"'JetBrains Mono',monospace",lineHeight:1.6}}/>
+      <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginTop:14}}><button className="ab" onClick={function(){setSR(false);}}>{"\u53D6\u6D88"}</button><button className="ab p" onClick={run}><Z.Send s={12}/> {"\u5B9F\u884C"}</button></div>
     </div></div>}
 
-    {sK&&<div className="mo" onClick={()=>setSK(false)}><div className="mc" onClick={e=>e.stopPropagation()}>
-      <div style={{display:"flex",justifyContent:"space-between",marginBottom:16}}><span style={{fontSize:15,fontWeight:600,color:"#d0d5de"}}>APIキー作成</span><button className="ab" style={{padding:"4px 6px"}} onClick={()=>setSK(false)}><Z.X s={14}/></button></div>
-      <div style={{marginBottom:14}}><div style={{fontSize:12,color:"#5a6070",marginBottom:6}}>名前</div><input value={kn} onChange={e=>setKn(e.target.value)} placeholder="CI/CD Runner" style={{width:"100%",background:"#0a0c10",border:"1px solid #1e2028",borderRadius:6,padding:"8px 12px",color:"#c0c8d4",fontSize:13}}/></div>
-      <div style={{marginBottom:14}}><div style={{fontSize:12,color:"#5a6070",marginBottom:6}}>権限</div><div style={{display:"flex",gap:8}}>{["read","execute","admin"].map(p=><button key={p} className={`ab ${kp===p?"p":""}`} onClick={()=>setKp(p)} style={{flex:1,justifyContent:"center"}}>{p}</button>)}</div></div>
-      <div style={{display:"flex",justifyContent:"flex-end",gap:8}}><button className="ab" onClick={()=>setSK(false)}>取消</button><button className="ab p" onClick={addKey}><Z.Key s={12}/> 作成</button></div>
+    {sK&&<div className="mo" onClick={function(){setSK(false);}}><div className="mc" onClick={function(e){e.stopPropagation();}}>
+      <div style={{display:"flex",justifyContent:"space-between",marginBottom:16}}><span style={{fontSize:15,fontWeight:600,color:"#d0d5de"}}>{"API\u30AD\u30FC\u4F5C\u6210"}</span><button className="ab" style={{padding:"4px 6px"}} onClick={function(){setSK(false);}}><Z.X s={14}/></button></div>
+      <div style={{marginBottom:14}}><div style={{fontSize:12,color:"#5a6070",marginBottom:6}}>{"\u540D\u524D"}</div><input value={kn} onChange={function(e){setKn(e.target.value);}} placeholder="CI/CD Runner" style={{width:"100%",background:"#0a0c10",border:"1px solid #1e2028",borderRadius:6,padding:"8px 12px",color:"#c0c8d4",fontSize:13}}/></div>
+      <div style={{marginBottom:14}}><div style={{fontSize:12,color:"#5a6070",marginBottom:6}}>{"\u6A29\u9650"}</div><div style={{display:"flex",gap:8}}>{["read","execute","admin"].map(function(p){return<button key={p} className={"ab "+(kp===p?"p":"")} onClick={function(){setKp(p);}} style={{flex:1,justifyContent:"center"}}>{p}</button>;})}</div></div>
+      <div style={{display:"flex",justifyContent:"flex-end",gap:8}}><button className="ab" onClick={function(){setSK(false);}}>{"\u53D6\u6D88"}</button><button className="ab p" onClick={addKey}><Z.Key s={12}/> {"\u4F5C\u6210"}</button></div>
     </div></div>}
 
-    {sD&&<div className="mo" onClick={()=>setSD(false)}><div className="mc" onClick={e=>e.stopPropagation()}>
-      <div style={{display:"flex",justifyContent:"space-between",marginBottom:16}}><span style={{fontSize:15,fontWeight:600,color:"#d0d5de"}}>分配実行 <Bdg t="9d" c="#60a5fa"/></span><button className="ab" style={{padding:"4px 6px"}} onClick={()=>setSD(false)}><Z.X s={14}/></button></div>
-      <div style={{marginBottom:12}}><div style={{fontSize:12,color:"#5a6070",marginBottom:6}}>ターゲット</div><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{nodes.filter(n=>n.st==="online").map(n=><button key={n.id} className={`ab ${dt===n.id?"p":""}`} onClick={()=>setDt(n.id)} style={{fontSize:12}}><Z.Srv s={11}/>{n.name.split("(")[0].trim()}</button>)}</div></div>
-      <div style={{marginBottom:14}}><div style={{fontSize:12,color:"#5a6070",marginBottom:6}}>Reiコード</div><textarea value={dc} onChange={e=>setDc(e.target.value)} placeholder="クリック 500 300" rows={4} style={{width:"100%",background:"#0a0c10",border:"1px solid #1e2028",borderRadius:8,padding:"10px 14px",color:"#c0c8d4",fontSize:13,resize:"vertical",fontFamily:"'JetBrains Mono',monospace",lineHeight:1.6}}/></div>
-      <div style={{display:"flex",justifyContent:"flex-end",gap:8}}><button className="ab" onClick={()=>setSD(false)}>取消</button><button className="ab p" onClick={dispatch}><Z.Share s={12}/> 分配</button></div>
+    {sD&&<div className="mo" onClick={function(){setSD(false);}}><div className="mc" onClick={function(e){e.stopPropagation();}}>
+      <div style={{display:"flex",justifyContent:"space-between",marginBottom:16}}><span style={{fontSize:15,fontWeight:600,color:"#d0d5de"}}>{"\u5206\u914D\u5B9F\u884C "}<Bdg t="9d" c="#60a5fa"/></span><button className="ab" style={{padding:"4px 6px"}} onClick={function(){setSD(false);}}><Z.X s={14}/></button></div>
+      <div style={{marginBottom:12}}><div style={{fontSize:12,color:"#5a6070",marginBottom:6}}>{"\u30BF\u30FC\u30B2\u30C3\u30C8"}</div><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{nodes.filter(function(n){return n.st==="online";}).map(function(n){return<button key={n.id} className={"ab "+(dt===n.id?"p":"")} onClick={function(){setDt(n.id);}} style={{fontSize:12}}><Z.Srv s={11}/>{n.name.split("(")[0].trim()}</button>;})}</div></div>
+      <div style={{marginBottom:14}}><div style={{fontSize:12,color:"#5a6070",marginBottom:6}}>{"\u30B3\u30FC\u30C9"}</div><textarea value={dc} onChange={function(e){setDc(e.target.value);}} placeholder="click 500 300" rows={4} style={{width:"100%",background:"#0a0c10",border:"1px solid #1e2028",borderRadius:8,padding:"10px 14px",color:"#c0c8d4",fontSize:13,resize:"vertical",fontFamily:"'JetBrains Mono',monospace",lineHeight:1.6}}/></div>
+      <div style={{display:"flex",justifyContent:"flex-end",gap:8}}><button className="ab" onClick={function(){setSD(false);}}>{"\u53D6\u6D88"}</button><button className="ab p" onClick={dispatch}><Z.Share s={12}/> {"\u5206\u914D"}</button></div>
     </div></div>}
 
-    <footer style={{borderTop:"1px solid #12141a",padding:"10px 24px",display:"flex",justifyContent:"space-between",fontSize:11,color:"#2a2d38"}}><span>Rei Automator v0.6.0 — Phase 9c+9d</span><span>零 — AI is not an app. AI is a participant.</span></footer>
+    <footer style={{borderTop:"1px solid #12141a",padding:"10px 24px",display:"flex",justifyContent:"space-between",fontSize:11,color:"#2a2d38"}}><span>Rei Automator v0.6.0 — Phase 9e Live</span><span>{"\u96F6 \u2014 AI is not an app. AI is a participant."}</span></footer>
   </div>;
 }
 

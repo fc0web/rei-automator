@@ -70,6 +70,10 @@ export class ApiRoutes {
   // ─── ルート登録 ──────────────────────────────────
 
   private registerRoutes(): void {
+    // ── ダッシュボード配信（認証不要） ──
+    this.route('GET', /^\/dashboard$/, null, this.handleDashboard);
+    this.route('GET', /^\/$/, null, this.handleDashboardRedirect);
+
     // ── ヘルス（認証不要） ──
     this.route('GET', /^\/health$/, null, this.handleHealth);
     this.route('GET', /^\/stats$/, null, this.handleStats);
@@ -147,6 +151,40 @@ export class ApiRoutes {
     }
 
     return false;  // ルート不一致
+  }
+
+  // ─── ダッシュボードハンドラ ──────────────────────
+
+  private async handleDashboard(_req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    // dashboard.html を複数のパスから探索
+    const candidates = [
+      path.resolve(__dirname, '..', 'renderer', 'dashboard.html'),
+      path.resolve(__dirname, '..', '..', 'src', 'renderer', 'dashboard.html'),
+      path.resolve(__dirname, 'dashboard.html'),
+      path.resolve(process.cwd(), 'src', 'renderer', 'dashboard.html'),
+      path.resolve(process.cwd(), 'dist', 'renderer', 'dashboard.html'),
+    ];
+
+    for (const candidate of candidates) {
+      if (fs.existsSync(candidate)) {
+        const html = fs.readFileSync(candidate, 'utf-8');
+        res.writeHead(200, {
+          'Content-Type': 'text/html; charset=utf-8',
+          'Cache-Control': 'no-cache',
+        });
+        res.end(html);
+        return;
+      }
+    }
+
+    this.logger.warn(`dashboard.html not found. Searched: ${candidates.join(', ')}`);
+    res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.end(`<!DOCTYPE html><html><body style="background:#0c0e12;color:#c0c5d0;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh"><div><h2>Dashboard not found</h2><p>dashboard.html が見つかりません。<br/>src/renderer/dashboard.html を配置してください。</p></div></body></html>`);
+  }
+
+  private async handleDashboardRedirect(_req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    res.writeHead(302, { 'Location': '/dashboard' });
+    res.end();
   }
 
   // ─── ヘルス系ハンドラ ────────────────────────────
