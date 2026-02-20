@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rei Automator Dashboard — Phase 9c</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body,#root{height:100%}
+body{background:#0c0e12;color:#c0c5d0;font-family:'Noto Sans JP','SF Pro Display',-apple-system,sans-serif}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#2a2d38;border-radius:3px}
+@keyframes pulse-glow{0%,100%{opacity:.6}50%{opacity:1}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes slideIn{from{opacity:0;transform:translateX(-10px)}to{opacity:1;transform:translateX(0)}}
+textarea:focus,input:focus{outline:none;border-color:#8ba4b8!important}
+.tab-btn{background:none;border:none;color:#4a5060;cursor:pointer;display:flex;align-items:center;gap:6px;padding:8px 14px;border-radius:6px;font-size:13px;font-weight:500;transition:all .2s;font-family:'Noto Sans JP',sans-serif}
+.tab-btn:hover{color:#8a90a0;background:rgba(139,164,184,.06)}
+.tab-btn.active{color:#c0c8d4;background:rgba(139,164,184,.1)}
+.ab{background:rgba(139,164,184,.08);border:1px solid #22252e;color:#8a90a0;cursor:pointer;padding:6px 12px;border-radius:6px;font-size:12px;display:inline-flex;align-items:center;gap:5px;transition:all .2s;font-family:'Noto Sans JP',sans-serif}
+.ab:hover{background:rgba(139,164,184,.14);color:#c0c8d4;border-color:#30333e}
+.ab.p{background:rgba(139,164,184,.15);border-color:#8ba4b830;color:#a0b8cc}
+.ab.p:hover{background:rgba(139,164,184,.22)}
+.ab.d{color:#f87171}
+.ab.d:hover{background:rgba(248,113,113,.1);border-color:rgba(248,113,113,.2)}
+.mo{position:fixed;inset:0;background:rgba(0,0,0,.65);display:flex;align-items:center;justify-content:center;z-index:100;backdrop-filter:blur(4px);animation:fadeIn .2s}
+.mc{background:#13151a;border:1px solid #22252e;border-radius:14px;padding:24px;min-width:420px;max-width:520px;animation:fadeIn .25s}
+.ll{display:flex;gap:10px;padding:3px 0;font-size:12.5px;line-height:1.5;font-family:'JetBrains Mono',monospace;animation:slideIn .2s}
+.tr{display:grid;grid-template-columns:32px 1fr 80px 120px 80px 60px;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;transition:background .2s;cursor:pointer;border-bottom:1px solid #16181e}
+.tr:hover{background:rgba(139,164,184,.04)}
+.kr{display:grid;grid-template-columns:1fr 180px 80px 120px 120px 40px;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid #16181e}
+.nr{display:grid;grid-template-columns:32px 1fr 90px 100px 80px 100px;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;transition:background .2s;border-bottom:1px solid #16181e}
+.nr:hover{background:rgba(139,164,184,.04)}
+.sc{background:linear-gradient(135deg,#13151a,#181b22);border:1px solid #22252e;border-radius:10px;padding:16px 18px;display:flex;align-items:center;gap:14;transition:border-color .3s,box-shadow .3s;cursor:default}
+.sc:hover{border-color:rgba(139,164,184,.25);box-shadow:0 0 20px rgba(139,164,184,.06)}
+.sc.mi{padding:12px 14px;gap:10px}
+.pn{background:linear-gradient(180deg,#13151a,#111318);border:1px solid #1e2028;border-radius:12px;padding:18px}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const{useState,useEffect,useRef,useCallback}=React;
+
+const CFG={API:"http://localhost:19720",WS:"ws://localhost:19720",POLL:5000,DEMO:true};
+
+/* ── Icons ── */
+const Z={
+Activity:p=><svg width={p.s||16} height={p.s||16} viewBox="0 0 24 24" fill="none" stroke={p.c||"currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>,
+Cpu:p=><svg width={p.s||16} height={p.s||16} viewBox="0 0 24 24" fill="none" stroke={p.c||"currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></svg>,
+Clock:p=><svg width={p.s||16} height={p.s||16} viewBox="0 0 24 24" fill="none" stroke={p.c||"currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
+Key:p=><svg width={p.s||16} height={p.s||16} viewBox="0 0 24 24" fill="none" stroke={p.c||"currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>,
+Play:p=><svg width={p.s||16} height={p.s||16} viewBox="0 0 24 24" fill="none" stroke={p.c||"currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>,
+Sq:p=><svg width={p.s||16} height={p.s||16} viewBox="0 0 24 24" fill="none" stroke={p.c||"currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>,
+Ref:p=><svg width={p.s||16} height={p.s||16} viewBox="0 0 24 24" fill="none" stroke={p.c||"currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>,
+WOff:p=><svg width={p.s||16} height={p.s||16} viewBox="0 0 24 24" fill="none" stroke={p.c||"currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>,
+CDown:p=><svg width={p.s||16} height={p.s||16} viewBox="0 0 24 24" fill="none" stroke={p.c||"currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>,
+CRight:p=><svg width={p.s||16} height={p.s||16} viewBox="0 0 24 24" fill="none" stroke={p.c||"currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>,
+Trash:p=><svg width={p.s||16} height={p.s||16} viewBox="0 0 24 24" fill="none" stroke={p.c||"currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>,
+Plus:p=><svg width={p.s||16} height={p.s||16} viewBox="0 0 24 24" fill="none" stroke={p.c||"currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>,
+Eye:p=><svg width={p.s||16} height={p.s||16} viewBox="0 0 24 24" fill="none" stroke={p.c||"currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>,
+Alert:p=><svg width={p.s||16} height={p.s||16} viewBox="0 0 24 24" fill="none" stroke={p.c||"currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>,
+Check:p=><svg width={p.s||16} height={p.s||16} viewBox="0 0 24 24" fill="none" stroke={p.c||"currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>,
+Load:p=><svg width={p.s||16} height={p.s||16} viewBox="0 0 24 24" fill="none" stroke={p.c||"currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg>,
+Srv:p=><svg width={p.s||16} height={p.s||16} viewBox="0 0 24 24" fill="none" stroke={p.c||"currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>,
+Zap:p=><svg width={p.s||16} height={p.s||16} viewBox="0 0 24 24" fill="none" stroke={p.c||"currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>,
+Bar3:p=><svg width={p.s||16} height={p.s||16} viewBox="0 0 24 24" fill="none" stroke={p.c||"currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>,
+Scroll:p=><svg width={p.s||16} height={p.s||16} viewBox="0 0 24 24" fill="none" stroke={p.c||"currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 21h12a2 2 0 0 0 2-2v-2H10v2a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v3h4"/><path d="M19 17V5a2 2 0 0 0-2-2H4"/></svg>,
+Gear:p=><svg width={p.s||16} height={p.s||16} viewBox="0 0 24 24" fill="none" stroke={p.c||"currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.6.85 1 1.51 1H21a2 2 0 0 1 0 4h-.09c-.66.01-1.25.4-1.51 1z"/></svg>,
+Send:p=><svg width={p.s||16} height={p.s||16} viewBox="0 0 24 24" fill="none" stroke={p.c||"currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>,
+X:p=><svg width={p.s||16} height={p.s||16} viewBox="0 0 24 24" fill="none" stroke={p.c||"currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
+Net:p=><svg width={p.s||16} height={p.s||16} viewBox="0 0 24 24" fill="none" stroke={p.c||"currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="2" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="16" y="16" width="6" height="6" rx="1"/><path d="M12 8v4"/><path d="M5 16v-2a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v2"/></svg>,
+Share:p=><svg width={p.s||16} height={p.s||16} viewBox="0 0 24 24" fill="none" stroke={p.c||"currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>,
+Globe:p=><svg width={p.s||16} height={p.s||16} viewBox="0 0 24 24" fill="none" stroke={p.c||"currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>,
+};
+
+/* ── SVG Charts ── */
+function BarSVG({data,w=500,h=170,k1="executions",k2="errors",c1="#6ee7b7",c2="#f87171",lk="hour",li=3}){
+  if(!data||!data.length)return null;
+  const mx=Math.max(...data.map(d=>Math.max(d[k1]||0,d[k2]||0)),1);
+  const bw=Math.max(2,(w-40)/data.length/2-2);const ch=h-30;
+  return <svg width="100%" height={h} viewBox={`0 0 ${w} ${h}`} style={{display:"block"}}>
+    {[.25,.5,.75,1].map(f=><line key={f} x1="35" y1={ch*(1-f)+5} x2={w} y2={ch*(1-f)+5} stroke="#1a1d24" strokeDasharray="3 3"/>)}
+    {[0,.5,1].map(f=><text key={f} x="30" y={ch*(1-f)+9} fill="#3a4050" fontSize="10" textAnchor="end">{Math.round(mx*f)}</text>)}
+    {data.map((d,i)=>{const x=40+i*((w-40)/data.length);const h1=(d[k1]||0)/mx*ch;const h2=(d[k2]||0)/mx*ch;
+      return <g key={i}><rect x={x} y={ch-h1+5} width={bw} height={h1} fill={c1+"40"} stroke={c1} strokeWidth=".8" rx="2"/><rect x={x+bw+1} y={ch-h2+5} width={bw} height={Math.max(h2,0)} fill={c2+"40"} stroke={c2} strokeWidth=".8" rx="2"/>{i%li===0&&<text x={x+bw} y={h-4} fill="#3a4050" fontSize="10" textAnchor="middle">{d[lk]}</text>}</g>;})}
+  </svg>;
+}
+function AreaSVG({data,w=500,h=170,keys=[{k:"mem",c:"#a78bfa",l:"Memory"},{k:"cpu",c:"#60a5fa",l:"CPU"}],mx=100}){
+  if(!data||!data.length)return null;const ch=h-25,cw=w-40;
+  const pts=(k)=>data.map((d,i)=>`${40+(i/(data.length-1))*cw},${5+ch*(1-(d[k]||0)/mx)}`).join(" ");
+  const area=(k)=>{const p=data.map((d,i)=>`${40+(i/(data.length-1))*cw},${5+ch*(1-(d[k]||0)/mx)}`);return `${p.join(" ")} ${40+cw},${ch+5} 40,${ch+5}`;};
+  return <svg width="100%" height={h} viewBox={`0 0 ${w} ${h}`} style={{display:"block"}}>
+    {[.25,.5,.75,1].map(f=><line key={f} x1="35" y1={ch*(1-f)+5} x2={w} y2={ch*(1-f)+5} stroke="#1a1d24" strokeDasharray="3 3"/>)}
+    {[0,.5,1].map(f=><text key={f} x="30" y={ch*(1-f)+9} fill="#3a4050" fontSize="10" textAnchor="end">{Math.round(mx*f)}</text>)}
+    {keys.map(k=><g key={k.k}><polygon points={area(k.k)} fill={k.c+"12"}/><polyline points={pts(k.k)} fill="none" stroke={k.c} strokeWidth="1.5" strokeLinejoin="round"/></g>)}
+    {keys.map((k,i)=><g key={k.k+"l"}><line x1={w-140+i*75} y1={h-6} x2={w-128+i*75} y2={h-6} stroke={k.c} strokeWidth="2"/><text x={w-124+i*75} y={h-2} fill="#4a5060" fontSize="10">{k.l}</text></g>)}
+  </svg>;
+}
+function Donut({data,sz=130}){
+  const tot=data.reduce((s,d)=>s+d.value,0)||1;const cx=sz/2,cy=sz/2,r=sz*.38,r2=sz*.25;let ca=-Math.PI/2;
+  const arcs=data.map(d=>{const a=(d.value/tot)*Math.PI*2;const sa=ca;ca+=a;const ea=ca;const g=.03;
+    const x1=cx+r*Math.cos(sa+g),y1=cy+r*Math.sin(sa+g),x2=cx+r*Math.cos(ea-g),y2=cy+r*Math.sin(ea-g);
+    const x3=cx+r2*Math.cos(ea-g),y3=cy+r2*Math.sin(ea-g),x4=cx+r2*Math.cos(sa+g),y4=cy+r2*Math.sin(sa+g);
+    return{...d,path:`M${x1},${y1} A${r},${r} 0 ${a>Math.PI?1:0} 1 ${x2},${y2} L${x3},${y3} A${r2},${r2} 0 ${a>Math.PI?1:0} 0 ${x4},${y4} Z`};});
+  return <svg width={sz} height={sz} viewBox={`0 0 ${sz} ${sz}`}>{arcs.map((a,i)=><path key={i} d={a.path} fill={a.color+"80"}/>)}<text x={cx} y={cy+4} textAnchor="middle" fill="#6a7080" fontSize="11" fontFamily="'JetBrains Mono',monospace">{tot}</text></svg>;
+}
+
+/* ── Demo ── */
+const D={
+  stats:()=>({up:Math.floor(Math.random()*86400)+3600,tr:Math.floor(Math.random()*200)+50,tq:Math.floor(Math.random()*5),tru:Math.floor(Math.random()*3),err:Math.floor(Math.random()*10),mem:Math.round((40+Math.random()*30)*10)/10,cpu:Math.round((5+Math.random()*40)*10)/10,sch:4,wf:3}),
+  tasks:()=>[
+    {id:"task-001",name:"daily-report.rei",status:"completed",sa:Date.now()-300000,ca:Date.now()-295000,sch:"every 1h",ret:0},
+    {id:"task-002",name:"backup-sync.rei",status:"running",sa:Date.now()-60000,ca:null,sch:"every 30m",ret:0},
+    {id:"task-003",name:"health-check.rei",status:"queued",sa:null,ca:null,sch:null,ret:0},
+    {id:"task-004",name:"screenshot-audit.rei",status:"error",sa:Date.now()-120000,ca:Date.now()-118000,sch:"every 2h",ret:2,err:"Window not found: Chrome"},
+    {id:"task-005",name:"form-fill.rei",status:"completed",sa:Date.now()-600000,ca:Date.now()-595000,sch:null,ret:0},
+    {id:"task-006",name:"data-scrape.rei",status:"completed",sa:Date.now()-900000,ca:Date.now()-890000,sch:"every 4h",ret:1},
+  ],
+  logs:()=>{const lv=["info","info","info","warn","error","debug"];const ms=["Task daily-report.rei started","click (450,320)","Template match: 0.94","OCR: '売上レポート'","Completed in 4.8s","Schedule: backup-sync.rei","Window not found — retry","Watcher: auto-import.rei","WS from 192.168.1.5","Memory: 67.2 MB","GET /api/tasks","screenshot-audit failed","Daemon reload","Heartbeat: nominal"];return Array.from({length:30},(_,i)=>({ts:Date.now()-(29-i)*10000,lv:lv[Math.floor(Math.random()*lv.length)],msg:ms[Math.floor(Math.random()*ms.length)]}));},
+  hist:()=>Array.from({length:24},(_,i)=>({hour:`${String(i).padStart(2,"0")}:00`,executions:Math.floor(Math.random()*20)+2,errors:Math.floor(Math.random()*3)})),
+  keys:()=>[{key:"rei_admin_8b4e...c98f",name:"Admin Key",perm:"admin",cat:"2026-02-18",lu:"2026-02-20"},{key:"rei_read_f2a1...7d3e",name:"Monitor",perm:"read",cat:"2026-02-19",lu:"2026-02-20"},{key:"rei_exec_c4b2...9e1a",name:"CI/CD Runner",perm:"execute",cat:"2026-02-20",lu:null}],
+  nodes:()=>[{id:"node-a",name:"Alpha (本機)",host:"localhost:19720",st:"online",tasks:3,cpu:24.5,role:"leader",ls:Date.now()},{id:"node-b",name:"Beta (サーバー)",host:"192.168.1.10:19720",st:"online",tasks:5,cpu:45.2,role:"worker",ls:Date.now()-2e3},{id:"node-g",name:"Gamma (VPS)",host:"vps.example.com:19720",st:"online",tasks:2,cpu:12.8,role:"worker",ls:Date.now()-5e3},{id:"node-d",name:"Delta (テスト)",host:"192.168.1.20:19720",st:"offline",tasks:0,cpu:0,role:"worker",ls:Date.now()-36e5}],
+};
+
+/* ── Utils ── */
+const F={
+  up:s=>{const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60);return d>0?`${d}d ${h}h ${m}m`:h>0?`${h}h ${m}m`:`${m}m`;},
+  t:ts=>ts?new Date(ts).toLocaleTimeString("ja-JP",{hour:"2-digit",minute:"2-digit",second:"2-digit"}):"—",
+  ago:ts=>{if(!ts)return"—";const s=Math.floor((Date.now()-ts)/1000);if(s<60)return`${s}秒前`;if(s<3600)return`${Math.floor(s/60)}分前`;return`${Math.floor(s/3600)}時間前`;},
+};
+const SC={completed:{c:"#6ee7b7",i:"Check",l:"完了"},running:{c:"#93c5fd",i:"Load",l:"実行中"},queued:{c:"#a5a5a5",i:"Clock",l:"待機"},error:{c:"#fca5a5",i:"Alert",l:"エラー"}};
+const LC={info:"#8ba4b8",warn:"#fbbf24",error:"#f87171",debug:"#6b7280"};
+const PC={admin:"#f0abfc",execute:"#93c5fd",read:"#a5b4c4"};
+
+/* ── Widgets ── */
+const Stat=({ic,lb,vl,sub,ac="#8ba4b8",mi})=>{const Icon=Z[ic];return<div className={`sc${mi?" mi":""}`}><div style={{width:mi?32:38,height:mi?32:38,borderRadius:8,background:ac+"12",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Icon s={mi?15:17} c={ac}/></div><div style={{minWidth:0}}><div style={{fontSize:11,color:"#5a6070",textTransform:"uppercase",letterSpacing:".06em",marginBottom:2}}>{lb}</div><div style={{fontSize:mi?18:22,fontWeight:700,color:"#d0d5de",fontFamily:"'JetBrains Mono',monospace",lineHeight:1.1}}>{vl}</div>{sub&&<div style={{fontSize:11,color:"#4a5060",marginTop:2}}>{sub}</div>}</div></div>;};
+const SH=({ic,tl,ac="#8ba4b8",act})=>{const Icon=Z[ic];return<div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}><div style={{display:"flex",alignItems:"center",gap:8}}><Icon s={16} c={ac}/><span style={{fontSize:14,fontWeight:600,color:"#c0c5d0",letterSpacing:".02em"}}>{tl}</span></div>{act}</div>;};
+const Bdg=({t,c})=><span style={{fontSize:10,fontWeight:600,color:c,background:c+"18",padding:"2px 8px",borderRadius:4,textTransform:"uppercase",letterSpacing:".05em"}}>{t}</span>;
+
+/* ── App ── */
+function App(){
+  const[conn,setConn]=useState(false);
+  const[tab,setTab]=useState("overview");
+  const[st,setSt]=useState(D.stats());
+  const[tasks,setTasks]=useState(D.tasks());
+  const[logs,setLogs]=useState(D.logs());
+  const[hist]=useState(D.hist());
+  const[keys,setKeys]=useState(D.keys());
+  const[nodes,setNodes]=useState(D.nodes());
+  const[mh,setMh]=useState(Array.from({length:30},(_,i)=>({t:i,mem:40+Math.random()*25,cpu:5+Math.random()*35})));
+  const[code,setCode]=useState("");
+  const[sR,setSR]=useState(false);
+  const[sK,setSK]=useState(false);
+  const[sD,setSD]=useState(false);
+  const[kn,setKn]=useState("");
+  const[kp,setKp]=useState("read");
+  const[lf,setLf]=useState("all");
+  const[et,setEt]=useState(null);
+  const[dt,setDt]=useState("");
+  const[dc,setDc]=useState("");
+  const le=useRef(null);
+
+  useEffect(()=>{
+    setConn(true);
+    const iv=setInterval(()=>{
+      setSt(D.stats());
+      setMh(p=>[...p.slice(1),{t:p[p.length-1].t+1,mem:40+Math.random()*25,cpu:5+Math.random()*35}]);
+      setNodes(p=>p.map(n=>n.st==="online"?{...n,cpu:Math.round(Math.max(1,Math.min(95,n.cpu+Math.random()*6-3))*10)/10,tasks:Math.max(0,n.tasks+Math.floor(Math.random()*3)-1),ls:Date.now()}:n));
+      if(Math.random()>.5){const nl=D.logs().slice(-1)[0];nl.ts=Date.now();setLogs(p=>[...p.slice(-49),nl]);}
+    },3000);
+    return()=>clearInterval(iv);
+  },[]);
+
+  useEffect(()=>{if(tab==="logs")le.current?.scrollIntoView({behavior:"smooth"});},[logs,tab]);
+
+  const run=()=>{if(!code.trim())return;setTasks(p=>[{id:`t-${String(Date.now()).slice(-6)}`,name:"remote-exec",status:"running",sa:Date.now(),ca:null,sch:null,ret:0},...p]);setLogs(p=>[...p,{ts:Date.now(),lv:"info",msg:"Remote task started"}]);setCode("");setSR(false);};
+  const stop=id=>setTasks(p=>p.map(t=>t.id===id?{...t,status:"completed",ca:Date.now()}:t));
+  const addKey=()=>{if(!kn.trim())return;setKeys(p=>[...p,{key:`rei_${kp}_${Math.random().toString(36).slice(2,8)}`,name:kn,perm:kp,cat:new Date().toISOString().slice(0,10),lu:null}]);setKn("");setSK(false);};
+  const delKey=k=>setKeys(p=>p.filter(x=>x.key!==k));
+  const reload=()=>setLogs(p=>[...p,{ts:Date.now(),lv:"info",msg:"Daemon reload requested"}]);
+  const dispatch=()=>{if(!dt||!dc.trim())return;const n=nodes.find(x=>x.id===dt);setLogs(p=>[...p,{ts:Date.now(),lv:"info",msg:`[9d] Dispatch → ${n?.name||dt}`}]);setTasks(p=>[{id:`d-${String(Date.now()).slice(-6)}`,name:`→ ${n?.name?.split("(")[0]||"?"}`,status:"running",sa:Date.now(),ca:null,sch:null,ret:0},...p]);setDc("");setSD(false);};
+
+  const fl=lf==="all"?logs:logs.filter(l=>l.lv===lf);
+  const ts={completed:tasks.filter(t=>t.status==="completed").length,running:tasks.filter(t=>t.status==="running").length,queued:tasks.filter(t=>t.status==="queued").length,error:tasks.filter(t=>t.status==="error").length};
+  const pd=Object.entries(ts).filter(([,v])=>v>0).map(([n,v])=>({name:SC[n].l,value:v,color:SC[n].c}));
+  const on=nodes.filter(n=>n.st==="online");
+  const tnt=on.reduce((s,n)=>s+n.tasks,0);
+  const ac=on.length?Math.round(on.reduce((s,n)=>s+n.cpu,0)/on.length*10)/10:0;
+
+  const tabs=[{id:"overview",l:"概要",i:"Bar3"},{id:"tasks",l:"タスク",i:"Cpu"},{id:"nodes",l:"ノード",i:"Net"},{id:"logs",l:"ログ",i:"Scroll"},{id:"keys",l:"APIキー",i:"Key"},{id:"settings",l:"設定",i:"Gear"}];
+
+  return <div style={{minHeight:"100vh",background:"#0c0e12",color:"#c0c5d0",fontFamily:"'Noto Sans JP',sans-serif"}}>
+    {/* Header */}
+    <header style={{borderBottom:"1px solid #1a1d24",padding:"12px 24px",display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,zIndex:50,backdropFilter:"blur(12px)",background:"rgba(12,14,18,.85)"}}>
+      <div style={{display:"flex",alignItems:"center",gap:14}}>
+        <div style={{width:32,height:32,borderRadius:8,background:"linear-gradient(135deg,#2a3040,#1a1d28)",border:"1px solid #2a2d38",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:700,color:"#8ba4b8",fontFamily:"'JetBrains Mono',monospace"}}>零</div>
+        <div><div style={{fontSize:15,fontWeight:600,color:"#d0d5de"}}>Rei Automator <span style={{fontSize:11,color:"#4a5060",fontWeight:400}}>v0.6.0</span></div><div style={{fontSize:10.5,color:"#3a4050",letterSpacing:".04em"}}>DASHBOARD — PHASE 9c + 9d</div></div>
+      </div>
+      <div style={{display:"flex",alignItems:"center",gap:14}}>
+        <div style={{display:"flex",alignItems:"center",gap:6,fontSize:12}}>
+          {conn?<><div style={{width:7,height:7,borderRadius:"50%",background:"#6ee7b7",animation:"pulse-glow 2s infinite"}}/><span style={{color:"#6ee7b7"}}>接続中</span><span style={{color:"#3a4050",fontSize:11,margin:"0 3px"}}>|</span><Z.Net s={12} c="#60a5fa"/><span style={{color:"#60a5fa"}}>{on.length}/{nodes.length}</span></>:<><Z.WOff s={13} c="#f87171"/><span style={{color:"#f87171"}}>未接続</span></>}
+        </div>
+        <button className="ab p" onClick={()=>setSR(true)}><Z.Play s={12}/> 実行</button>
+        <button className="ab" onClick={()=>setSD(true)}><Z.Share s={12}/> 分配</button>
+        <button className="ab" onClick={reload}><Z.Ref s={12}/></button>
+      </div>
+    </header>
+
+    <nav style={{borderBottom:"1px solid #16181e",padding:"0 24px",display:"flex",gap:2}}>
+      {tabs.map(t=>{const Ic=Z[t.i];return<button key={t.id} className={`tab-btn ${tab===t.id?"active":""}`} onClick={()=>setTab(t.id)}><Ic s={14}/>{t.l}</button>;})}
+    </nav>
+
+    <main style={{padding:"20px 24px",maxWidth:1280,margin:"0 auto"}}>
+
+      {tab==="overview"&&<div style={{display:"flex",flexDirection:"column",gap:18,animation:"fadeIn .3s"}}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))",gap:12}}>
+          <Stat ic="Clock" lb="稼働時間" vl={F.up(st.up)} ac="#8ba4b8"/>
+          <Stat ic="Zap" lb="実行タスク" vl={st.tr} sub={`${ts.running} 実行中`} ac="#6ee7b7"/>
+          <Stat ic="Alert" lb="エラー" vl={st.err} ac="#f87171"/>
+          <Stat ic="Cpu" lb="メモリ" vl={`${st.mem}MB`} sub={`CPU ${st.cpu}%`} ac="#a78bfa"/>
+          <Stat ic="Net" lb="ノード" vl={`${on.length}/${nodes.length}`} sub={`avg ${ac}%`} ac="#60a5fa"/>
+          <Stat ic="Share" lb="分散タスク" vl={tnt} ac="#fbbf24"/>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+          <div className="pn"><SH ic="Bar3" tl="実行履歴（24時間）" ac="#6ee7b7"/><BarSVG data={hist}/></div>
+          <div className="pn"><SH ic="Activity" tl="リソース使用量" ac="#a78bfa"/><AreaSVG data={mh}/></div>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"260px 1fr",gap:14}}>
+          <div className="pn"><SH ic="Cpu" tl="タスク状況" ac="#93c5fd"/><div style={{display:"flex",justifyContent:"center",marginBottom:10}}><Donut data={pd}/></div>
+            <div style={{display:"flex",flexDirection:"column",gap:6}}>{Object.entries(SC).map(([k,v])=><div key={k} style={{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:12}}><div style={{display:"flex",alignItems:"center",gap:6}}><div style={{width:8,height:8,borderRadius:2,background:v.c+"80"}}/><span style={{color:"#6a7080"}}>{v.l}</span></div><span style={{color:v.c,fontFamily:"'JetBrains Mono',monospace",fontWeight:600}}>{ts[k]}</span></div>)}</div>
+          </div>
+          <div className="pn"><SH ic="Scroll" tl="最新ログ" ac="#8ba4b8" act={<button className="ab" onClick={()=>setTab("logs")} style={{fontSize:11}}>全て →</button>}/>
+            <div style={{maxHeight:200,overflowY:"auto",fontFamily:"'JetBrains Mono',monospace"}}>{logs.slice(-10).map((l,i)=><div key={i} className="ll" style={{opacity:.5+(i/10)*.5}}><span style={{color:"#2a2d38",flexShrink:0}}>{F.t(l.ts)}</span><span style={{color:LC[l.lv]||"#6b7280",flexShrink:0,width:40,textAlign:"right"}}>{l.lv}</span><span style={{color:"#8a90a0"}}>{l.msg}</span></div>)}</div>
+          </div>
+        </div>
+      </div>}
+
+      {tab==="tasks"&&<div style={{animation:"fadeIn .3s"}}><div className="pn">
+        <SH ic="Cpu" tl="タスク一覧" ac="#93c5fd" act={<div style={{display:"flex",gap:8}}><button className="ab p" onClick={()=>setSR(true)}><Z.Play s={12}/> 新規</button><button className="ab" onClick={()=>setSD(true)}><Z.Share s={12}/> 分配</button></div>}/>
+        <div style={{display:"grid",gridTemplateColumns:"32px 1fr 80px 120px 80px 60px",gap:10,padding:"6px 12px",fontSize:11,color:"#3a4050",borderBottom:"1px solid #1a1d24",textTransform:"uppercase",letterSpacing:".06em"}}><span/><span>タスク</span><span>状態</span><span>時刻</span><span>予約</span><span/></div>
+        {tasks.map(t=>{const c=SC[t.status]||SC.queued;const Ic=Z[c.i];return<div key={t.id}>
+          <div className="tr" onClick={()=>setEt(et===t.id?null:t.id)}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"center"}}><Ic s={15} c={c.c}/></div>
+            <div><div style={{fontSize:13,color:"#c0c8d4",fontWeight:500}}>{t.name}</div><div style={{fontSize:11,color:"#3a4050",fontFamily:"'JetBrains Mono',monospace"}}>{t.id}</div></div>
+            <Bdg t={c.l} c={c.c}/>
+            <div style={{fontSize:12,color:"#5a6070",fontFamily:"'JetBrains Mono',monospace"}}>{F.t(t.sa)}</div>
+            <div style={{fontSize:11,color:t.sch?"#fbbf24":"#2a2d38"}}>{t.sch||"—"}</div>
+            <div style={{display:"flex",gap:4}}>{t.status==="running"&&<button className="ab d" style={{padding:"4px 6px"}} onClick={e=>{e.stopPropagation();stop(t.id);}}><Z.Sq s={11}/></button>}{et===t.id?<Z.CDown s={14} c="#4a5060"/>:<Z.CRight s={14} c="#2a2d38"/>}</div>
+          </div>
+          {et===t.id&&<div style={{padding:"10px 12px 10px 54px",fontSize:12,color:"#5a6070",background:"rgba(139,164,184,.02)",borderBottom:"1px solid #16181e",animation:"fadeIn .2s"}}>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}><div>開始: {F.t(t.sa)}</div><div>完了: {F.t(t.ca)}</div><div>リトライ: {t.ret}回</div></div>
+            {t.err&&<div style={{marginTop:6,color:"#f87171",fontFamily:"'JetBrains Mono',monospace",fontSize:11}}>⚠ {t.err}</div>}
+          </div>}
+        </div>;})}
+      </div></div>}
+
+      {tab==="nodes"&&<div style={{animation:"fadeIn .3s",display:"flex",flexDirection:"column",gap:16}}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))",gap:12}}>
+          <Stat ic="Srv" lb="総ノード" vl={nodes.length} sub={`${on.length} オンライン`} ac="#60a5fa"/>
+          <Stat ic="Zap" lb="分散タスク" vl={tnt} ac="#6ee7b7"/>
+          <Stat ic="Cpu" lb="平均CPU" vl={`${ac}%`} ac="#a78bfa"/>
+          <Stat ic="Globe" lb="リーダー" vl={nodes.find(n=>n.role==="leader")?.name?.split(" ")[0]||"—"} ac="#fbbf24"/>
+        </div>
+        <div className="pn"><SH ic="Net" tl="トポロジー" ac="#60a5fa"/>
+          <div style={{display:"flex",justifyContent:"center",gap:24,padding:"20px 0",flexWrap:"wrap"}}>
+            {nodes.map(n=>{const isL=n.role==="leader",isO=n.st==="online",ac=isL?"#fbbf24":isO?"#6ee7b7":"#f87171";
+              return<div key={n.id} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:8}}>
+                <div style={{position:"relative"}}><div style={{width:72,height:72,borderRadius:14,background:`linear-gradient(135deg,${ac}08,${ac}04)`,border:`1.5px solid ${ac}${isO?"40":"15"}`,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}><Z.Srv s={20} c={ac}/><div style={{fontSize:9,color:ac,marginTop:4,fontWeight:600}}>{isL?"LEADER":"WORKER"}</div></div><div style={{position:"absolute",top:-3,right:-3,width:10,height:10,borderRadius:"50%",background:isO?"#6ee7b7":"#f87171",border:"2px solid #0c0e12",animation:isO?"pulse-glow 2s infinite":"none"}}/></div>
+                <div style={{textAlign:"center"}}><div style={{fontSize:12,color:"#c0c8d4",fontWeight:500}}>{n.name.split("(")[0].trim()}</div><div style={{fontSize:10,color:"#4a5060",fontFamily:"'JetBrains Mono',monospace"}}>{n.host}</div>{isO&&<div style={{fontSize:10,color:"#3a4050",marginTop:2}}>CPU {n.cpu}% · {n.tasks}タスク</div>}</div>
+              </div>;})}
+          </div>
+          <div style={{textAlign:"center",fontSize:11,color:"#2a2d38",marginTop:4}}>── REST API :19720 相互通信 ──</div>
+        </div>
+        <div className="pn"><SH ic="Srv" tl="ノード一覧" ac="#60a5fa" act={<button className="ab" onClick={()=>setSD(true)}><Z.Share s={12}/> 分配</button>}/>
+          <div style={{display:"grid",gridTemplateColumns:"32px 1fr 90px 100px 80px 100px",gap:10,padding:"6px 12px",fontSize:11,color:"#3a4050",borderBottom:"1px solid #1a1d24",textTransform:"uppercase"}}><span/><span>名前</span><span>状態</span><span>タスク</span><span>CPU</span><span>応答</span></div>
+          {nodes.map(n=>{const nc=n.st==="online"?{c:"#6ee7b7",l:"稼働中"}:{c:"#f87171",l:"停止"};return<div key={n.id} className="nr"><div style={{display:"flex",alignItems:"center",justifyContent:"center"}}><Z.Srv s={15} c={nc.c}/></div><div><div style={{fontSize:13,color:"#c0c8d4",fontWeight:500}}>{n.name} {n.role==="leader"&&<Bdg t="Leader" c="#fbbf24"/>}</div><div style={{fontSize:11,color:"#3a4050",fontFamily:"'JetBrains Mono',monospace"}}>{n.host}</div></div><Bdg t={nc.l} c={nc.c}/><div style={{fontSize:13,color:"#c0c8d4",fontFamily:"'JetBrains Mono',monospace"}}>{n.tasks}</div><div style={{fontSize:12,color:n.cpu>70?"#f87171":n.cpu>40?"#fbbf24":"#6ee7b7",fontFamily:"'JetBrains Mono',monospace"}}>{n.st==="online"?`${n.cpu}%`:"—"}</div><div style={{fontSize:11,color:"#4a5060"}}>{F.ago(n.ls)}</div></div>;})}
+        </div>
+        <div className="pn"><SH ic="Share" tl="分配戦略" ac="#fbbf24"/>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:14}}>
+            {[{n:"Round Robin",d:"順番に均等分配",a:true},{n:"Least Load",d:"負荷最小ノード優先",a:false},{n:"Affinity",d:"タスク→ノード固定",a:false}].map(s=><div key={s.n} style={{padding:"14px 16px",borderRadius:10,background:s.a?"rgba(251,191,36,.06)":"rgba(139,164,184,.03)",border:`1px solid ${s.a?"#fbbf2430":"#1e2028"}`,cursor:"pointer"}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}><span style={{fontSize:13,fontWeight:600,color:s.a?"#fbbf24":"#6a7080"}}>{s.n}</span>{s.a&&<Bdg t="有効" c="#fbbf24"/>}</div><div style={{fontSize:11.5,color:"#4a5060"}}>{s.d}</div></div>)}
+          </div>
+        </div>
+      </div>}
+
+      {tab==="logs"&&<div style={{animation:"fadeIn .3s"}}><div className="pn" style={{height:"calc(100vh - 180px)",display:"flex",flexDirection:"column"}}>
+        <SH ic="Scroll" tl="リアルタイムログ" ac="#8ba4b8" act={<div style={{display:"flex",gap:4}}>{["all","info","warn","error","debug"].map(v=><button key={v} className={`ab ${lf===v?"p":""}`} onClick={()=>setLf(v)} style={{fontSize:11,padding:"4px 8px"}}>{v==="all"?"全て":v}</button>)}</div>}/>
+        <div style={{flex:1,overflowY:"auto",fontFamily:"'JetBrains Mono',monospace",background:"#0a0c10",borderRadius:8,padding:"10px 14px",border:"1px solid #16181e"}}>
+          {fl.map((l,i)=><div key={i} className="ll"><span style={{color:"#22252e",flexShrink:0,fontSize:11}}>{F.t(l.ts)}</span><span style={{color:LC[l.lv]||"#6b7280",flexShrink:0,width:44,textAlign:"right",fontSize:11,fontWeight:600}}>{l.lv}</span><span style={{color:"#8a90a0",fontSize:12}}>{l.msg}</span></div>)}
+          <div ref={le}/>
+        </div>
+      </div></div>}
+
+      {tab==="keys"&&<div style={{animation:"fadeIn .3s"}}><div className="pn">
+        <SH ic="Key" tl="APIキー管理" ac="#f0abfc" act={<button className="ab p" onClick={()=>setSK(true)}><Z.Plus s={12}/> 新規</button>}/>
+        <div className="kr" style={{fontSize:11,color:"#3a4050",textTransform:"uppercase",borderBottom:"1px solid #1a1d24"}}><span>名前</span><span>キー</span><span>権限</span><span>作成日</span><span>最終</span><span/></div>
+        {keys.map(k=><div key={k.key} className="kr"><div style={{fontSize:13,color:"#c0c8d4",fontWeight:500}}>{k.name}</div><div style={{fontSize:12,color:"#4a5060",fontFamily:"'JetBrains Mono',monospace"}}>{k.key}</div><Bdg t={k.perm} c={PC[k.perm]}/><div style={{fontSize:12,color:"#4a5060"}}>{k.cat}</div><div style={{fontSize:12,color:"#4a5060"}}>{k.lu||"—"}</div><button className="ab d" style={{padding:"4px 6px"}} onClick={()=>delKey(k.key)}><Z.Trash s={12}/></button></div>)}
+      </div></div>}
+
+      {tab==="settings"&&<div style={{animation:"fadeIn .3s",display:"flex",flexDirection:"column",gap:14}}>
+        <div className="pn"><SH ic="Srv" tl="接続設定" ac="#60a5fa"/>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+            <div><div style={{fontSize:11,color:"#4a5060",marginBottom:6}}>API</div><div style={{fontSize:13,color:"#8a90a0",fontFamily:"'JetBrains Mono',monospace",background:"#0a0c10",padding:"8px 12px",borderRadius:6,border:"1px solid #1a1d24"}}>{CFG.API}</div></div>
+            <div><div style={{fontSize:11,color:"#4a5060",marginBottom:6}}>WebSocket</div><div style={{fontSize:13,color:"#8a90a0",fontFamily:"'JetBrains Mono',monospace",background:"#0a0c10",padding:"8px 12px",borderRadius:6,border:"1px solid #1a1d24"}}>{CFG.WS}</div></div>
+          </div>
+        </div>
+        <div className="pn"><SH ic="Activity" tl="デーモン情報" ac="#6ee7b7"/>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12}}><Stat mi ic="Clock" lb="稼働時間" vl={F.up(st.up)} ac="#8ba4b8"/><Stat mi ic="Cpu" lb="キュー" vl={st.tq} ac="#93c5fd"/><Stat mi ic="Eye" lb="監視" vl={st.wf} ac="#60a5fa"/></div>
+          <div style={{marginTop:14}}><button className="ab" onClick={reload}><Z.Ref s={12}/> リロード</button></div>
+        </div>
+        <div className="pn"><SH ic="Zap" tl="Rei-AIOS" ac="#fbbf24"/>
+          <div style={{fontSize:12.5,color:"#5a6070",lineHeight:1.8}}>
+            <div style={{marginBottom:4}}>🌌 Layer 0: 宇宙図書館</div><div style={{marginBottom:4}}>⭐ Layer 1: Rei（公理・理論）</div>
+            <div style={{marginBottom:4}}><span style={{color:"#fbbf24"}}>🤖 Layer 2: Rei-AIOS（実装）</span> <Bdg t="現在地" c="#fbbf24"/></div>
+            <div style={{marginTop:10,padding:"10px 14px",background:"#0a0c10",borderRadius:8,border:"1px solid #1a1d24",fontStyle:"italic",color:"#6a7080"}}>"AI is not an app. AI is a participant."</div>
+          </div>
+        </div>
+      </div>}
+    </main>
+
+    {sR&&<div className="mo" onClick={()=>setSR(false)}><div className="mc" onClick={e=>e.stopPropagation()}>
+      <div style={{display:"flex",justifyContent:"space-between",marginBottom:16}}><span style={{fontSize:15,fontWeight:600,color:"#d0d5de"}}>タスク実行</span><button className="ab" style={{padding:"4px 6px"}} onClick={()=>setSR(false)}><Z.X s={14}/></button></div>
+      <textarea value={code} onChange={e=>setCode(e.target.value)} placeholder={"クリック 500 300\n待機 1000"} rows={7} style={{width:"100%",background:"#0a0c10",border:"1px solid #1e2028",borderRadius:8,padding:"10px 14px",color:"#c0c8d4",fontSize:13,resize:"vertical",fontFamily:"'JetBrains Mono',monospace",lineHeight:1.6}}/>
+      <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginTop:14}}><button className="ab" onClick={()=>setSR(false)}>取消</button><button className="ab p" onClick={run}><Z.Send s={12}/> 実行</button></div>
+    </div></div>}
+
+    {sK&&<div className="mo" onClick={()=>setSK(false)}><div className="mc" onClick={e=>e.stopPropagation()}>
+      <div style={{display:"flex",justifyContent:"space-between",marginBottom:16}}><span style={{fontSize:15,fontWeight:600,color:"#d0d5de"}}>APIキー作成</span><button className="ab" style={{padding:"4px 6px"}} onClick={()=>setSK(false)}><Z.X s={14}/></button></div>
+      <div style={{marginBottom:14}}><div style={{fontSize:12,color:"#5a6070",marginBottom:6}}>名前</div><input value={kn} onChange={e=>setKn(e.target.value)} placeholder="CI/CD Runner" style={{width:"100%",background:"#0a0c10",border:"1px solid #1e2028",borderRadius:6,padding:"8px 12px",color:"#c0c8d4",fontSize:13}}/></div>
+      <div style={{marginBottom:14}}><div style={{fontSize:12,color:"#5a6070",marginBottom:6}}>権限</div><div style={{display:"flex",gap:8}}>{["read","execute","admin"].map(p=><button key={p} className={`ab ${kp===p?"p":""}`} onClick={()=>setKp(p)} style={{flex:1,justifyContent:"center"}}>{p}</button>)}</div></div>
+      <div style={{display:"flex",justifyContent:"flex-end",gap:8}}><button className="ab" onClick={()=>setSK(false)}>取消</button><button className="ab p" onClick={addKey}><Z.Key s={12}/> 作成</button></div>
+    </div></div>}
+
+    {sD&&<div className="mo" onClick={()=>setSD(false)}><div className="mc" onClick={e=>e.stopPropagation()}>
+      <div style={{display:"flex",justifyContent:"space-between",marginBottom:16}}><span style={{fontSize:15,fontWeight:600,color:"#d0d5de"}}>分配実行 <Bdg t="9d" c="#60a5fa"/></span><button className="ab" style={{padding:"4px 6px"}} onClick={()=>setSD(false)}><Z.X s={14}/></button></div>
+      <div style={{marginBottom:12}}><div style={{fontSize:12,color:"#5a6070",marginBottom:6}}>ターゲット</div><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{nodes.filter(n=>n.st==="online").map(n=><button key={n.id} className={`ab ${dt===n.id?"p":""}`} onClick={()=>setDt(n.id)} style={{fontSize:12}}><Z.Srv s={11}/>{n.name.split("(")[0].trim()}</button>)}</div></div>
+      <div style={{marginBottom:14}}><div style={{fontSize:12,color:"#5a6070",marginBottom:6}}>Reiコード</div><textarea value={dc} onChange={e=>setDc(e.target.value)} placeholder="クリック 500 300" rows={4} style={{width:"100%",background:"#0a0c10",border:"1px solid #1e2028",borderRadius:8,padding:"10px 14px",color:"#c0c8d4",fontSize:13,resize:"vertical",fontFamily:"'JetBrains Mono',monospace",lineHeight:1.6}}/></div>
+      <div style={{display:"flex",justifyContent:"flex-end",gap:8}}><button className="ab" onClick={()=>setSD(false)}>取消</button><button className="ab p" onClick={dispatch}><Z.Share s={12}/> 分配</button></div>
+    </div></div>}
+
+    <footer style={{borderTop:"1px solid #12141a",padding:"10px 24px",display:"flex",justifyContent:"space-between",fontSize:11,color:"#2a2d38"}}><span>Rei Automator v0.6.0 — Phase 9c+9d</span><span>零 — AI is not an app. AI is a participant.</span></footer>
+  </div>;
+}
+
+ReactDOM.render(React.createElement(App), document.getElementById("root"));
+</script>
+</body>
+</html>
