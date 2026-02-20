@@ -1,23 +1,25 @@
 /**
  * Rei Automator — Daemon Process
- * Phase 9a: スケジューラ統合 + ファイル監視 + ヘルスHTTPサーバー
+ * Phase 9a+9b: スケジューラ統合 + ファイル監視 + REST API + WebSocket
  *
- * デーモンの責務:
- * 1. スケジュール済みタスクの定期実行
- * 2. watchDirの.reiファイル追加/変更の検知 → 自動実行
- * 3. HTTPヘルスエンドポイントの提供
- * 4. タスクの再試行・エラーハンドリング
+ * ★ Phase 9aのdaemon.tsを置き換えてください。
+ *
+ * Phase 9bで追加された変更点:
+ * - ヘルスHTTPサーバー → ApiServerに置き換え（REST API + WebSocket統合）
+ * - 公開メソッド追加（getPublicStats, getTaskList, executeRemote, etc.）
+ * - EventEmitter経由でタスクイベントを発火（APIサーバーがWebSocketに中継）
+ * - DaemonConfigにAPI関連設定を追加
  */
 
 import * as path from 'path';
 import * as fs from 'fs';
-import * as http from 'http';
 import { EventEmitter } from 'events';
 
 import { ReiRuntime } from '../lib/core/runtime';
 import { ReiParser } from '../lib/core/parser';
 import { Logger } from '../lib/core/logger';
 import { ScriptWatcher } from './watcher';
+import { ApiServer } from './api-server';
 
 // ─── 型定義 ──────────────────────────────────────────
 
@@ -29,13 +31,17 @@ export interface DaemonConfig {
   retryDelayMs: number;
   executionMode: 'cursor' | 'cursorless';
   defaultWindow?: string;
+  // Phase 9b: API設定
+  apiHost?: string;
+  authEnabled?: boolean;
+  apiKeyFilePath?: string;
 }
 
 export interface TaskEntry {
   id: string;
   name: string;
   scriptPath: string;
-  schedule?: string;           // cron式 or interval (e.g., "*/5 * * * *", "every 30m")
+  schedule?: string;
   running: boolean;
   lastRun?: string;
   lastResult?: 'success' | 'error';
@@ -52,15 +58,6 @@ interface TaskQueueItem {
   addedAt: number;
 }
 
-interface DaemonStats {
-  startedAt: number;
-  activeTasks: number;
-  completedTasks: number;
-  errorTasks: number;
-  pid: number;
-  memoryMB: number;
-}
-
 // ─── Daemon クラス ───────────────────────────────────
 
 export class Daemon extends EventEmitter {
@@ -75,7 +72,7 @@ export class Daemon extends EventEmitter {
   private errorTasks = 0;
 
   private watcher?: ScriptWatcher;
-  private healthServer?: http.Server;
+  private apiServer?: ApiServer;                     // ★ Phase 9b: APIサーバー
   private scheduleTimers: Map<string, NodeJS.Timeout> = new Map();
   private parser: ReiParser;
 
@@ -94,7 +91,7 @@ export class Daemon extends EventEmitter {
 
     this.logger.info('Daemon starting...');
 
-    // 1. watchDirの確認・作成
+    // 1. ディレクトリ確認・作成
     this.ensureDir(this.config.watchDir);
     this.ensureDir(this.config.logDir);
 
@@ -111,8 +108,16 @@ export class Daemon extends EventEmitter {
     // 4. スケジュールタスクの起動
     this.startScheduledTasks();
 
-    // 5. ヘルスHTTPサーバー起動
-    await this.startHealthServer();
+    // 5. ★ Phase 9b: APIサーバー起動（REST + WebSocket + ヘルス統合）
+    this.apiServer = new ApiServer(this, {
+      port: this.config.healthPort,
+      host: this.config.apiHost || '0.0.0.0',
+      auth: {
+        enabled: this.config.authEnabled ?? true,
+        keyFilePath: this.config.apiKeyFilePath,
+      },
+    }, this.logger);
+    await this.apiServer.start();
 
     this.logger.info(`Daemon started (PID: ${process.pid})`);
 
@@ -127,7 +132,6 @@ export class Daemon extends EventEmitter {
     // スケジュールタイマー停止
     for (const [id, timer] of this.scheduleTimers) {
       clearInterval(timer);
-      this.logger.debug(`Stopped schedule: ${id}`);
     }
     this.scheduleTimers.clear();
 
@@ -136,14 +140,124 @@ export class Daemon extends EventEmitter {
       this.watcher.stop();
     }
 
-    // ヘルスサーバー停止
-    if (this.healthServer) {
-      await new Promise<void>((resolve) => {
-        this.healthServer!.close(() => resolve());
-      });
+    // ★ Phase 9b: APIサーバー停止
+    if (this.apiServer) {
+      await this.apiServer.stop();
     }
 
     this.logger.info('Daemon stopped');
+  }
+
+  // ─── ★ Phase 9b: 公開メソッド ────────────────────
+
+  /**
+   * 統計情報を外部に公開（ApiRoutesから呼ばれる）
+   */
+  getPublicStats(): any {
+    const mem = process.memoryUsage();
+    return {
+      startedAt: this.startedAt,
+      uptime: Math.floor((Date.now() - this.startedAt) / 1000),
+      activeTasks: Array.from(this.tasks.values()).filter(t => t.running).length,
+      completedTasks: this.completedTasks,
+      errorTasks: this.errorTasks,
+      totalTasks: this.tasks.size,
+      queueLength: this.queue.length,
+      pid: process.pid,
+      memoryMB: mem.heapUsed / (1024 * 1024),
+    };
+  }
+
+  /**
+   * タスク一覧を外部に公開
+   */
+  getTaskList(): TaskEntry[] {
+    return Array.from(this.tasks.values());
+  }
+
+  /**
+   * タスク詳細を外部に公開
+   */
+  getTask(id: string): TaskEntry | null {
+    // IDが完全一致 or 名前に部分一致
+    const direct = this.tasks.get(id);
+    if (direct) return direct;
+
+    for (const task of this.tasks.values()) {
+      if (task.name === id || task.id.includes(id)) return task;
+    }
+    return null;
+  }
+
+  /**
+   * watchDirパスを外部に公開
+   */
+  getWatchDir(): string {
+    return this.config.watchDir;
+  }
+
+  /**
+   * リモートからのスクリプト実行（POST /api/tasks/run）
+   */
+  async executeRemote(taskId: string, name: string, code: string): Promise<{ elapsed: number }> {
+    this.emit('task:started', { id: taskId, name });
+
+    try {
+      const commands = this.parser.parse(code);
+      const runtime = new ReiRuntime({
+        mode: this.config.executionMode,
+        defaultWindow: this.config.defaultWindow,
+        logger: this.logger,
+      });
+
+      const startTime = Date.now();
+      await runtime.execute(commands);
+      const elapsed = Date.now() - startTime;
+
+      this.completedTasks++;
+      this.emit('task:completed', { id: taskId, name, elapsed });
+      return { elapsed };
+    } catch (err: any) {
+      this.errorTasks++;
+      this.emit('task:error', { id: taskId, name, error: err.message });
+      throw err;
+    }
+  }
+
+  /**
+   * タスクの停止リクエスト
+   */
+  stopTask(taskId: string): boolean {
+    for (const [id, task] of this.tasks) {
+      if (id === taskId || task.name === taskId || id.includes(taskId)) {
+        if (task.running) {
+          task.running = false;
+          this.logger.info(`Stop requested: ${task.name}`);
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /**
+   * デーモンのリロード（スクリプト再読み込み）
+   */
+  async reload(): Promise<void> {
+    this.logger.info('Reloading daemon...');
+
+    // スケジュールクリア
+    for (const [, timer] of this.scheduleTimers) {
+      clearInterval(timer);
+    }
+    this.scheduleTimers.clear();
+    this.tasks.clear();
+
+    // 再読み込み
+    await this.loadExistingScripts();
+    this.startScheduledTasks();
+
+    this.logger.info('Daemon reloaded');
   }
 
   // ─── スクリプト管理 ──────────────────────────────
@@ -164,7 +278,6 @@ export class Daemon extends EventEmitter {
     const name = path.basename(scriptPath, '.rei');
     const id = this.taskId(scriptPath);
 
-    // スクリプトファイル内の schedule ディレクティブを探す
     const code = fs.readFileSync(scriptPath, 'utf-8');
     const schedule = this.extractSchedule(code);
 
@@ -184,15 +297,9 @@ export class Daemon extends EventEmitter {
     return task;
   }
 
-  /**
-   * スクリプト先頭の schedule ディレクティブを解析
-   * 例: // @schedule every 30m
-   *      // @schedule cron 0 * * * *
-   *      // @schedule once
-   */
   private extractSchedule(code: string): string | null {
     const lines = code.split('\n');
-    for (const line of lines.slice(0, 10)) {  // 先頭10行のみ
+    for (const line of lines.slice(0, 10)) {
       const match = line.match(/\/\/\s*@schedule\s+(.+)/i);
       if (match) return match[1].trim();
     }
@@ -202,7 +309,7 @@ export class Daemon extends EventEmitter {
   // ─── スケジュール実行 ────────────────────────────
 
   private startScheduledTasks(): void {
-    for (const [id, task] of this.tasks) {
+    for (const [, task] of this.tasks) {
       if (task.schedule) {
         this.scheduleTask(task);
       }
@@ -218,12 +325,10 @@ export class Daemon extends EventEmitter {
     }
 
     if (intervalMs === 0) {
-      // "once" — 即座に1回実行
       this.enqueueTask(task.id, task.scriptPath);
       return;
     }
 
-    // 定期実行
     const timer = setInterval(() => {
       if (this.running && !task.running) {
         this.enqueueTask(task.id, task.scriptPath);
@@ -233,17 +338,9 @@ export class Daemon extends EventEmitter {
     this.scheduleTimers.set(task.id, timer);
     this.logger.info(`Scheduled ${task.name}: every ${intervalMs / 1000}s`);
 
-    // 初回も即実行
     this.enqueueTask(task.id, task.scriptPath);
   }
 
-  /**
-   * スケジュール文字列をミリ秒間隔に変換
-   * "every 30m" → 1800000
-   * "every 1h"  → 3600000
-   * "every 10s" → 10000
-   * "once"      → 0
-   */
   private parseScheduleInterval(schedule: string): number | null {
     if (schedule === 'once') return 0;
 
@@ -275,6 +372,9 @@ export class Daemon extends EventEmitter {
         retryCount: 0,
         addedAt: Date.now(),
       });
+
+      const task = this.tasks.get(taskId);
+      this.emit('task:queued', { id: taskId, name: task?.name || taskId });
       this.logger.debug(`Enqueued: ${path.basename(scriptPath)}`);
       this.processQueue();
     } catch (err: any) {
@@ -289,13 +389,14 @@ export class Daemon extends EventEmitter {
     while (this.queue.length > 0 && this.running) {
       const item = this.queue.shift()!;
       const task = this.tasks.get(item.taskId);
+      const scriptName = task?.name || path.basename(item.scriptPath);
 
       if (task) {
         task.running = true;
         task.lastRun = new Date().toISOString();
       }
 
-      const scriptName = path.basename(item.scriptPath);
+      this.emit('task:started', { id: item.taskId, name: scriptName });
       this.logger.info(`Executing: ${scriptName}`);
 
       try {
@@ -317,6 +418,7 @@ export class Daemon extends EventEmitter {
           task.runCount++;
         }
 
+        this.emit('task:completed', { id: item.taskId, name: scriptName, elapsed });
         this.logger.info(`Completed: ${scriptName} (${elapsed}ms)`);
       } catch (err: any) {
         this.errorTasks++;
@@ -327,6 +429,7 @@ export class Daemon extends EventEmitter {
           task.errorCount++;
         }
 
+        this.emit('task:error', { id: item.taskId, name: scriptName, error: err.message });
         this.logger.error(`Error in ${scriptName}: ${err.message}`);
 
         // リトライ
@@ -365,14 +468,12 @@ export class Daemon extends EventEmitter {
     if (existing && !existing.running) {
       this.logger.info(`Script changed: ${existing.name}, re-registering`);
 
-      // 既存スケジュールをクリア
       const timer = this.scheduleTimers.get(id);
       if (timer) {
         clearInterval(timer);
         this.scheduleTimers.delete(id);
       }
 
-      // 再登録
       const task = this.registerTask(filePath);
       if (task.schedule) {
         this.scheduleTask(task);
@@ -397,83 +498,6 @@ export class Daemon extends EventEmitter {
     }
   }
 
-  // ─── ヘルスHTTPサーバー ──────────────────────────
-
-  private async startHealthServer(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.healthServer = http.createServer((req, res) => {
-        this.handleHealthRequest(req, res);
-      });
-
-      this.healthServer.listen(this.config.healthPort, '0.0.0.0', () => {
-        this.logger.info(`Health server listening on :${this.config.healthPort}`);
-        resolve();
-      });
-
-      this.healthServer.on('error', (err: any) => {
-        if (err.code === 'EADDRINUSE') {
-          this.logger.warn(`Port ${this.config.healthPort} in use, trying ${this.config.healthPort + 1}`);
-          this.config.healthPort++;
-          this.healthServer!.listen(this.config.healthPort, '0.0.0.0');
-        } else {
-          reject(err);
-        }
-      });
-    });
-  }
-
-  private handleHealthRequest(req: http.IncomingMessage, res: http.ServerResponse): void {
-    const url = req.url || '/';
-
-    // CORS headers（Phase 9cダッシュボード用）
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Content-Type', 'application/json');
-
-    switch (url) {
-      case '/health':
-      case '/': {
-        const stats = this.getStats();
-        res.writeHead(200);
-        res.end(JSON.stringify({
-          ok: true,
-          version: '0.6.0-headless',
-          ...stats,
-        }));
-        break;
-      }
-
-      case '/tasks': {
-        const tasks = Array.from(this.tasks.values());
-        res.writeHead(200);
-        res.end(JSON.stringify({ tasks }));
-        break;
-      }
-
-      case '/stats': {
-        const stats = this.getStats();
-        res.writeHead(200);
-        res.end(JSON.stringify(stats));
-        break;
-      }
-
-      default:
-        res.writeHead(404);
-        res.end(JSON.stringify({ error: 'Not found' }));
-    }
-  }
-
-  private getStats(): DaemonStats {
-    const mem = process.memoryUsage();
-    return {
-      startedAt: this.startedAt,
-      activeTasks: Array.from(this.tasks.values()).filter(t => t.running).length,
-      completedTasks: this.completedTasks,
-      errorTasks: this.errorTasks,
-      pid: process.pid,
-      memoryMB: mem.heapUsed / (1024 * 1024),
-    };
-  }
-
   // ─── メインループ ────────────────────────────────
 
   private async mainLoop(): Promise<void> {
@@ -483,7 +507,7 @@ export class Daemon extends EventEmitter {
       // 定期的なステータスログ（1時間ごと）
       const uptime = Date.now() - this.startedAt;
       if (uptime > 0 && uptime % 3_600_000 < 1000) {
-        const stats = this.getStats();
+        const stats = this.getPublicStats();
         this.logger.info(
           `Heartbeat — uptime: ${Math.floor(uptime / 3_600_000)}h, ` +
           `tasks: ${stats.activeTasks} active / ${stats.completedTasks} completed / ${stats.errorTasks} errors, ` +
