@@ -24,7 +24,19 @@ export type ReiCommand =
   | FindClickCommand
   // Phase 5: 条件分岐・OCR
   | IfCommand
-  | ReadCommand;
+  | ReadCommand
+  // Phase 8: カーソルなし実行（Window API）
+  | WinClickCommand
+  | WinTypeCommand
+  | WinKeyCommand
+  | WinShortcutCommand
+  | WinActivateCommand
+  | WinCloseCommand
+  | WinMinimizeCommand
+  | WinMaximizeCommand
+  | WinRestoreCommand
+  | WinListCommand
+  | WinBlockCommand;
 
 export interface ClickCommand {
   type: 'click';
@@ -187,6 +199,124 @@ export interface ReadCommand {
   y: number;
   width: number;
   height: number;
+  line: number;
+}
+
+// ========== Phase 8: カーソルなし実行（Window API） ==========
+
+/**
+ * win_click("タイトル", x, y)
+ * ウィンドウ内座標でカーソルなしクリック
+ */
+export interface WinClickCommand {
+  type: 'win_click';
+  windowTitle: string;
+  x: number;
+  y: number;
+  action: 'click' | 'dblclick' | 'rightclick';
+  line: number;
+}
+
+/**
+ * win_type("タイトル", "テキスト")
+ * ウィンドウにカーソルなしテキスト入力
+ */
+export interface WinTypeCommand {
+  type: 'win_type';
+  windowTitle: string;
+  text: string;
+  line: number;
+}
+
+/**
+ * win_key("タイトル", "Enter")
+ * ウィンドウにカーソルなしキー送信
+ */
+export interface WinKeyCommand {
+  type: 'win_key';
+  windowTitle: string;
+  keyName: string;
+  line: number;
+}
+
+/**
+ * win_shortcut("タイトル", "Ctrl+S")
+ * ウィンドウにカーソルなしショートカット送信
+ */
+export interface WinShortcutCommand {
+  type: 'win_shortcut';
+  windowTitle: string;
+  keys: string[];
+  line: number;
+}
+
+/**
+ * win_activate("タイトル")
+ * ウィンドウをアクティブにする
+ */
+export interface WinActivateCommand {
+  type: 'win_activate';
+  windowTitle: string;
+  line: number;
+}
+
+/**
+ * win_close("タイトル")
+ * ウィンドウを閉じる
+ */
+export interface WinCloseCommand {
+  type: 'win_close';
+  windowTitle: string;
+  line: number;
+}
+
+/**
+ * win_minimize("タイトル")
+ */
+export interface WinMinimizeCommand {
+  type: 'win_minimize';
+  windowTitle: string;
+  line: number;
+}
+
+/**
+ * win_maximize("タイトル")
+ */
+export interface WinMaximizeCommand {
+  type: 'win_maximize';
+  windowTitle: string;
+  line: number;
+}
+
+/**
+ * win_restore("タイトル")
+ */
+export interface WinRestoreCommand {
+  type: 'win_restore';
+  windowTitle: string;
+  line: number;
+}
+
+/**
+ * win_list()
+ * 表示中のウィンドウ一覧を取得してログ出力
+ */
+export interface WinListCommand {
+  type: 'win_list';
+  line: number;
+}
+
+/**
+ * window("タイトル"):
+ *   click(100, 200)     // ← ウィンドウ内座標として解釈
+ *   type("Hello")
+ * 
+ * ブロック構文：指定ウィンドウに対して一連の操作をカーソルなしで実行
+ */
+export interface WinBlockCommand {
+  type: 'win_block';
+  windowTitle: string;
+  body: ReiCommand[];
   line: number;
 }
 

@@ -38,6 +38,8 @@ interface ReiAPI {
   onScheduleRunning: (cb: (data: { scheduleName: string; scriptName: string }) => void) => void;
   onLogEntry: (cb: (entry: LogEntry) => void) => void;
   onStepPause: (cb: (entry: LogEntry) => void) => void;
+  // Phase 8: Execution Mode
+  setExecutionMode: (mode: string, targetWindow?: string) => Promise<void>;
 }
 
 interface Window {
@@ -138,6 +140,8 @@ const state = {
   params: [] as ParamDef[],
   activePanel: 'log' as string,
   schedules: [] as ScheduleItem[],
+  executionMode: 'cursor' as 'cursor' | 'cursorless',
+  targetWindow: '' as string,
 };
 
 // ============================================================
@@ -220,6 +224,9 @@ const el = {
   schedOptDaily: document.getElementById('sched-opt-daily') as HTMLElement,
   schedOptWeekly: document.getElementById('sched-opt-weekly') as HTMLElement,
   btnSchedConfirm: document.getElementById('btn-sched-confirm') as HTMLButtonElement,
+  // Phase 8: Execution Mode
+  execMode: document.getElementById('exec-mode') as HTMLSelectElement,
+  execTargetWindow: document.getElementById('exec-target-window') as HTMLInputElement,
 };
 
 // ============================================================
@@ -487,6 +494,7 @@ async function runScript(paramValues?: Record<string, string | number | boolean>
   await window.reiAPI.errorSetPolicy(el.errorPolicy.value);
   await window.reiAPI.errorClear();
   await window.reiAPI.logSetStepMode(el.stepModeToggle.checked);
+  await window.reiAPI.setExecutionMode(state.executionMode, el.execTargetWindow.value || undefined);
   await window.reiAPI.logStartSession(state.currentScriptName);
   clearLogs();
 
@@ -870,6 +878,40 @@ function initEventListeners(): void {
   // ---- エラーポリシー (B) ----
   el.errorPolicy.addEventListener('change', async () => {
     await window.reiAPI.errorSetPolicy(el.errorPolicy.value);
+  });
+
+  // ---- Phase 8: 実行モード切替 ----
+  el.execMode.addEventListener('change', async () => {
+    const mode = el.execMode.value as 'cursor' | 'cursorless';
+    state.executionMode = mode;
+
+    if (mode === 'cursorless') {
+      el.execTargetWindow.hidden = false;
+      el.execTargetWindow.focus();
+      showToast('👻 カーソルなしモード: 対象ウィンドウ名を入力してください');
+    } else {
+      el.execTargetWindow.hidden = true;
+      showToast('🖱️ カーソルモード: 通常のマウス操作で実行します');
+    }
+
+    await window.reiAPI.setExecutionMode(mode, el.execTargetWindow.value || undefined);
+  });
+
+  el.execTargetWindow.addEventListener('change', async () => {
+    state.targetWindow = el.execTargetWindow.value;
+    if (state.executionMode === 'cursorless') {
+      await window.reiAPI.setExecutionMode('cursorless', el.execTargetWindow.value || undefined);
+      if (el.execTargetWindow.value) {
+        el.execTargetWindow.classList.add('active');
+        showToast(`👻 対象ウィンドウ: "${el.execTargetWindow.value}"`);
+      }
+    }
+  });
+
+  el.execTargetWindow.addEventListener('blur', () => {
+    if (!el.execTargetWindow.value) {
+      el.execTargetWindow.classList.remove('active');
+    }
   });
 
   // ---- Phase 7: スケジュール ----

@@ -483,6 +483,17 @@ app.whenReady().then(() => {
   ipcMain.handle('schedule:delete', async (_e, id) => scheduler.delete(id));
   ipcMain.handle('schedule:toggle', async (_e, id) => scheduler.toggle(id));
 
+  // ========== Phase 8: Execution Mode ==========
+  ipcMain.handle('exec:set-mode', async (_e, mode: string, targetWindow?: string) => {
+    if (executor) {
+      executor.setExecutionMode(
+        mode as 'cursor' | 'cursorless',
+        targetWindow
+      );
+      console.log(`[Main] Execution mode set: ${mode}${targetWindow ? ` → "${targetWindow}"` : ''}`);
+    }
+  });
+
   // runtime に注入（executor経由）
   if (executor && screenCapture) {
     executor.setImageMatcher(imageMatcher);

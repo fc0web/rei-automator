@@ -16,6 +16,7 @@ import { AutoController } from '../auto/controller';
 import { ImageMatcher } from '../auto/image-matcher';
 import { OcrEngine } from '../auto/ocr';
 import { ErrorHandler } from './error-handler';
+import { WinApiBackend } from '../auto/win-api-backend';
 
 /**
  * Reiプログラムの実行エンジン
@@ -36,6 +37,12 @@ export class ReiRuntime {
   // Phase 5: OCR
   private ocrEngine: OcrEngine | null = null;
   private lastText = '';  // read() の結果を保持
+
+  // Phase 8: カーソルなし実行
+  private winApi: WinApiBackend | null = null;
+  private winBlockTarget: string | null = null;  // window() ブロック内のターゲット
+  private executionMode: 'cursor' | 'cursorless' = 'cursor';
+  private cursorlessTarget: string = '';  // カーソルなしモード時のデフォルトウィンドウ
 
   constructor(controller: AutoController) {
     this.controller = controller;
@@ -70,6 +77,16 @@ export class ReiRuntime {
   // ── Phase 6: ErrorHandler注入メソッド ───────────────────
   setErrorHandler(handler: ErrorHandler): void {
     this.errorHandler = handler;
+  }
+
+  // ── Phase 8: WinApiBackend注入メソッド ─────────────────
+  setWinApiBackend(winApi: WinApiBackend): void {
+    this.winApi = winApi;
+  }
+
+  setExecutionMode(mode: 'cursor' | 'cursorless', targetWindow: string): void {
+    this.executionMode = mode;
+    this.cursorlessTarget = targetWindow;
   }
 
   getLastText(): string {
@@ -282,6 +299,38 @@ export class ReiRuntime {
    * 単一コマンドを実行
    */
   private async executeCommand(command: ReiCommand): Promise<void> {
+    // Phase 8: カーソルなしモードの場合、基本コマンドをWinApi経由に切り替え
+    if (this.executionMode === 'cursorless' && this.cursorlessTarget && this.winApi) {
+      const target = this.cursorlessTarget;
+      switch (command.type) {
+        case 'click':
+          this.context.onLog(`[カーソルなし] click(${command.x}, ${command.y}) → "${target}"`, 'debug');
+          await this.winApi.click(target, command.x, command.y);
+          return;
+        case 'dblclick':
+          this.context.onLog(`[カーソルなし] dblclick(${command.x}, ${command.y}) → "${target}"`, 'debug');
+          await this.winApi.dblclick(target, command.x, command.y);
+          return;
+        case 'rightclick':
+          this.context.onLog(`[カーソルなし] rightclick(${command.x}, ${command.y}) → "${target}"`, 'debug');
+          await this.winApi.rightclick(target, command.x, command.y);
+          return;
+        case 'type':
+          this.context.onLog(`[カーソルなし] type("${command.text}") → "${target}"`, 'debug');
+          await this.winApi.type(target, command.text);
+          return;
+        case 'key':
+          this.context.onLog(`[カーソルなし] key("${command.keyName}") → "${target}"`, 'debug');
+          await this.winApi.key(target, command.keyName);
+          return;
+        case 'shortcut':
+          this.context.onLog(`[カーソルなし] shortcut("${command.keys.join('+')}") → "${target}"`, 'debug');
+          await this.winApi.shortcut(target, command.keys);
+          return;
+        // move, drag, wait, loop, find, etc. はそのまま通常処理
+      }
+    }
+
     switch (command.type) {
       case 'click':
         this.context.onLog(`click(${command.x}, ${command.y})`, 'debug');
@@ -570,7 +619,172 @@ export class ReiRuntime {
         break;
       }
 
+      // ── Phase 8: カーソルなし実行コマンド ───────────────────
+      case 'win_click':
+      case 'win_type':
+      case 'win_key':
+      case 'win_shortcut':
+      case 'win_activate':
+      case 'win_close':
+      case 'win_minimize':
+      case 'win_maximize':
+      case 'win_restore':
+      case 'win_list':
+      case 'win_block':
+        await this.executeWinCommand(command);
+        break;
+
+      default:
         this.context.onLog(`不明なコマンド: ${(command as any).type}`, 'warn');
+    }
+  }
+
+  /**
+   * Phase 8: window()ブロック内のコマンドを実行
+   * ブロック内の click/type/key/shortcut を WinApiBackend 経由で実行
+   */
+  private async executeWinBlockCommand(command: ReiCommand, windowTitle: string): Promise<void> {
+    if (!this.winApi) {
+      this.context.onLog('エラー: WinApiBackend が初期化されていません', 'error');
+      return;
+    }
+
+    switch (command.type) {
+      case 'click':
+        this.context.onLog(`[window] click(${command.x}, ${command.y}) → "${windowTitle}"`, 'debug');
+        await this.winApi.click(windowTitle, command.x, command.y);
+        break;
+      case 'dblclick':
+        this.context.onLog(`[window] dblclick(${command.x}, ${command.y}) → "${windowTitle}"`, 'debug');
+        await this.winApi.dblclick(windowTitle, command.x, command.y);
+        break;
+      case 'rightclick':
+        this.context.onLog(`[window] rightclick(${command.x}, ${command.y}) → "${windowTitle}"`, 'debug');
+        await this.winApi.rightclick(windowTitle, command.x, command.y);
+        break;
+      case 'type':
+        this.context.onLog(`[window] type("${command.text}") → "${windowTitle}"`, 'debug');
+        await this.winApi.type(windowTitle, command.text);
+        break;
+      case 'key':
+        this.context.onLog(`[window] key("${command.keyName}") → "${windowTitle}"`, 'debug');
+        await this.winApi.key(windowTitle, command.keyName);
+        break;
+      case 'shortcut':
+        this.context.onLog(`[window] shortcut("${command.keys.join('+')}") → "${windowTitle}"`, 'debug');
+        await this.winApi.shortcut(windowTitle, command.keys);
+        break;
+      case 'wait':
+        this.context.onLog(`[window] wait(${command.durationMs}ms)`, 'debug');
+        await this.sleep(command.durationMs);
+        break;
+      default:
+        // その他のコマンドは通常の実行エンジンに委譲
+        await this.executeCommand(command);
+        break;
+    }
+  }
+
+  /**
+   * Phase 8: win_xxx コマンドの実行
+   */
+  private async executeWinCommand(command: ReiCommand): Promise<void> {
+    if (!this.winApi) {
+      this.context.onLog('エラー: WinApiBackend が初期化されていません（Windows専用機能です）', 'error');
+      return;
+    }
+
+    switch (command.type) {
+      case 'win_click': {
+        this.context.onLog(
+          `win_${command.action}("${command.windowTitle}", ${command.x}, ${command.y})`,
+          'debug'
+        );
+        switch (command.action) {
+          case 'click':
+            await this.winApi.click(command.windowTitle, command.x, command.y);
+            break;
+          case 'dblclick':
+            await this.winApi.dblclick(command.windowTitle, command.x, command.y);
+            break;
+          case 'rightclick':
+            await this.winApi.rightclick(command.windowTitle, command.x, command.y);
+            break;
+        }
+        break;
+      }
+
+      case 'win_type':
+        this.context.onLog(`win_type("${command.windowTitle}", "${command.text}")`, 'debug');
+        await this.winApi.type(command.windowTitle, command.text);
+        break;
+
+      case 'win_key':
+        this.context.onLog(`win_key("${command.windowTitle}", "${command.keyName}")`, 'debug');
+        await this.winApi.key(command.windowTitle, command.keyName);
+        break;
+
+      case 'win_shortcut':
+        this.context.onLog(`win_shortcut("${command.windowTitle}", "${command.keys.join('+')}")`, 'debug');
+        await this.winApi.shortcut(command.windowTitle, command.keys);
+        break;
+
+      case 'win_activate':
+        this.context.onLog(`win_activate("${command.windowTitle}")`, 'info');
+        await this.winApi.activate(command.windowTitle);
+        break;
+
+      case 'win_close':
+        this.context.onLog(`win_close("${command.windowTitle}")`, 'info');
+        await this.winApi.close(command.windowTitle);
+        break;
+
+      case 'win_minimize':
+        this.context.onLog(`win_minimize("${command.windowTitle}")`, 'info');
+        await this.winApi.minimize(command.windowTitle);
+        break;
+
+      case 'win_maximize':
+        this.context.onLog(`win_maximize("${command.windowTitle}")`, 'info');
+        await this.winApi.maximize(command.windowTitle);
+        break;
+
+      case 'win_restore':
+        this.context.onLog(`win_restore("${command.windowTitle}")`, 'info');
+        await this.winApi.restore(command.windowTitle);
+        break;
+
+      case 'win_list': {
+        this.context.onLog('ウィンドウ一覧を取得中...', 'info');
+        const windows = await this.winApi.listWindows();
+        if (windows.length === 0) {
+          this.context.onLog('表示中のウィンドウがありません', 'warn');
+        } else {
+          this.context.onLog(`${windows.length} 個のウィンドウを発見:`, 'info');
+          for (const w of windows) {
+            this.context.onLog(`  [${w.hwnd}] PID:${w.pid} "${w.title}"`, 'info');
+          }
+        }
+        break;
+      }
+
+      case 'win_block': {
+        this.context.onLog(`window("${command.windowTitle}"): ブロック開始`, 'info');
+        const prevTarget = this.winBlockTarget;
+        this.winBlockTarget = command.windowTitle;
+
+        for (const bodyCmd of command.body) {
+          if (!this.context.running) break;
+          await this.waitWhilePaused();
+          this.context.currentLine = bodyCmd.line;
+          this.context.onLineExecute(bodyCmd.line);
+          await this.executeWinBlockCommand(bodyCmd, command.windowTitle);
+        }
+
+        this.winBlockTarget = prevTarget;
+        this.context.onLog(`window("${command.windowTitle}"): ブロック終了`, 'info');
+        break;
+      }
     }
   }
 

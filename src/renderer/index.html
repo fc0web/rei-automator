@@ -14,7 +14,7 @@
       <div class="header-left">
         <span class="app-logo">⚡</span>
         <span class="app-title">Rei Automator</span>
-        <span class="phase-badge">Phase 7</span>
+        <span class="phase-badge">Phase 8</span>
       </div>
       <div class="header-center">
         <span id="current-script-name" class="current-script" data-i18n-default="untitled-script"></span>
@@ -102,6 +102,14 @@
               <option value="retry:3" data-i18n="control.retry3"></option>
               <option value="retry:5" data-i18n="control.retry5"></option>
             </select>
+            <span class="control-divider">│</span>
+            <label class="control-label">⚡ 実行モード</label>
+            <select id="exec-mode" class="control-select exec-mode-select">
+              <option value="cursor">🖱️ カーソル</option>
+              <option value="cursorless">👻 カーソルなし</option>
+            </select>
+            <input id="exec-target-window" type="text" class="exec-target-input"
+                   placeholder="対象ウィンドウ名（例: メモ帳）" hidden />
           </div>
           <div class="control-center">
             <button id="btn-run" class="run-btn large" data-i18n="button.run"></button>

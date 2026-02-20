@@ -258,6 +258,31 @@ body {
 }
 .toggle-label input { accent-color: var(--step-color); cursor: pointer; }
 
+/* ---- Phase 8: Execution Mode Toggle ---- */
+.control-divider { color: var(--border); font-size: 14px; margin: 0 2px; user-select: none; }
+.exec-mode-select {
+  font-weight: 600; min-width: 130px;
+}
+.exec-mode-select option { padding: 4px; }
+.exec-target-input {
+  background: var(--bg-panel); border: 1px solid var(--border);
+  color: var(--text-primary); border-radius: var(--radius);
+  padding: 4px 8px; font-size: 12px; outline: none; width: 180px;
+  transition: var(--transition);
+}
+.exec-target-input:focus { border-color: var(--accent-blue); }
+.exec-target-input.active { border-color: var(--accent-green); }
+.exec-mode-indicator {
+  font-size: 10px; padding: 2px 6px; border-radius: 3px;
+  font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;
+}
+.exec-mode-indicator.cursor {
+  background: rgba(78, 142, 247, 0.2); color: var(--accent-blue);
+}
+.exec-mode-indicator.cursorless {
+  background: rgba(0, 212, 170, 0.2); color: var(--accent-green);
+}
+
 /* ---- Buttons ---- */
 .run-btn {
   background: var(--accent-green); color: #000; border: none;

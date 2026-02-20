@@ -41,6 +41,18 @@ import {
   IfCommand,
   ReadCommand,
   IfCondition,
+  // Phase 8: カーソルなし実行
+  WinClickCommand,
+  WinTypeCommand,
+  WinKeyCommand,
+  WinShortcutCommand,
+  WinActivateCommand,
+  WinCloseCommand,
+  WinMinimizeCommand,
+  WinMaximizeCommand,
+  WinRestoreCommand,
+  WinListCommand,
+  WinBlockCommand,
 } from './types';
 
 /**
@@ -133,6 +145,34 @@ function parseBlock(
         body,
         line: lineNum,
       } as LoopCommand);
+
+      i = bodyStartIndex + bodyLines;
+      continue;
+    }
+
+    // ── Phase 8: window("title"): ブロック構文 ────────────────
+    const windowBlockMatch = trimmed.match(/^window\(\s*["']([^"']+)["']\s*\):\s*$/);
+    if (windowBlockMatch) {
+      const windowTitle = windowBlockMatch[1];
+      const bodyStartIndex = i + 1;
+      const bodyIndent = indentLevel + 1;
+      const body = parseBlock(lines, bodyStartIndex, bodyIndent, errors);
+
+      if (body.length === 0) {
+        errors.push({
+          message: `windowブロックの本体が空です（行 ${lineNum}）`,
+          line: lineNum,
+        });
+      }
+
+      const bodyLines = countBlockLines(lines, bodyStartIndex, bodyIndent);
+
+      commands.push({
+        type: 'win_block',
+        windowTitle,
+        body,
+        line: lineNum,
+      } as WinBlockCommand);
 
       i = bodyStartIndex + bodyLines;
       continue;
@@ -370,6 +410,129 @@ function parseCommand(
       height: parseInt(readMatch[4], 10),
       line: lineNum,
     } as ReadCommand;
+  }
+
+  // ── Phase 8: win_click("title", x, y) ──────────────────
+  const winClickMatch = line.match(
+    /^win_(click|dblclick|rightclick)\(\s*["']([^"']+)["']\s*,\s*(\d+)\s*,\s*(\d+)\s*\)$/
+  );
+  if (winClickMatch) {
+    return {
+      type: 'win_click' as const,
+      action: winClickMatch[1] as 'click' | 'dblclick' | 'rightclick',
+      windowTitle: winClickMatch[2],
+      x: parseInt(winClickMatch[3], 10),
+      y: parseInt(winClickMatch[4], 10),
+      line: lineNum,
+    } as WinClickCommand;
+  }
+
+  // ── Phase 8: win_type("title", "text") ────────────────
+  const winTypeMatch = line.match(
+    /^win_type\(\s*["']([^"']+)["']\s*,\s*["'](.*)["']\s*\)$/
+  );
+  if (winTypeMatch) {
+    return {
+      type: 'win_type' as const,
+      windowTitle: winTypeMatch[1],
+      text: winTypeMatch[2],
+      line: lineNum,
+    } as WinTypeCommand;
+  }
+
+  // ── Phase 8: win_key("title", "keyname") ──────────────
+  const winKeyMatch = line.match(
+    /^win_key\(\s*["']([^"']+)["']\s*,\s*["'](.+)["']\s*\)$/
+  );
+  if (winKeyMatch) {
+    return {
+      type: 'win_key' as const,
+      windowTitle: winKeyMatch[1],
+      keyName: winKeyMatch[2],
+      line: lineNum,
+    } as WinKeyCommand;
+  }
+
+  // ── Phase 8: win_shortcut("title", "Ctrl+S") ─────────
+  const winShortcutMatch = line.match(
+    /^win_shortcut\(\s*["']([^"']+)["']\s*,\s*["'](.+)["']\s*\)$/
+  );
+  if (winShortcutMatch) {
+    return {
+      type: 'win_shortcut' as const,
+      windowTitle: winShortcutMatch[1],
+      keys: winShortcutMatch[2].split('+').map((k: string) => k.trim()),
+      line: lineNum,
+    } as WinShortcutCommand;
+  }
+
+  // ── Phase 8: win_activate("title") ────────────────────
+  const winActivateMatch = line.match(
+    /^win_activate\(\s*["']([^"']+)["']\s*\)$/
+  );
+  if (winActivateMatch) {
+    return {
+      type: 'win_activate' as const,
+      windowTitle: winActivateMatch[1],
+      line: lineNum,
+    } as WinActivateCommand;
+  }
+
+  // ── Phase 8: win_close("title") ───────────────────────
+  const winCloseMatch = line.match(
+    /^win_close\(\s*["']([^"']+)["']\s*\)$/
+  );
+  if (winCloseMatch) {
+    return {
+      type: 'win_close' as const,
+      windowTitle: winCloseMatch[1],
+      line: lineNum,
+    } as WinCloseCommand;
+  }
+
+  // ── Phase 8: win_minimize("title") ────────────────────
+  const winMinimizeMatch = line.match(
+    /^win_minimize\(\s*["']([^"']+)["']\s*\)$/
+  );
+  if (winMinimizeMatch) {
+    return {
+      type: 'win_minimize' as const,
+      windowTitle: winMinimizeMatch[1],
+      line: lineNum,
+    } as WinMinimizeCommand;
+  }
+
+  // ── Phase 8: win_maximize("title") ────────────────────
+  const winMaximizeMatch = line.match(
+    /^win_maximize\(\s*["']([^"']+)["']\s*\)$/
+  );
+  if (winMaximizeMatch) {
+    return {
+      type: 'win_maximize' as const,
+      windowTitle: winMaximizeMatch[1],
+      line: lineNum,
+    } as WinMaximizeCommand;
+  }
+
+  // ── Phase 8: win_restore("title") ─────────────────────
+  const winRestoreMatch = line.match(
+    /^win_restore\(\s*["']([^"']+)["']\s*\)$/
+  );
+  if (winRestoreMatch) {
+    return {
+      type: 'win_restore' as const,
+      windowTitle: winRestoreMatch[1],
+      line: lineNum,
+    } as WinRestoreCommand;
+  }
+
+  // ── Phase 8: win_list() ───────────────────────────────
+  const winListMatch = line.match(/^win_list\(\s*\)$/);
+  if (winListMatch) {
+    return {
+      type: 'win_list' as const,
+      line: lineNum,
+    } as WinListCommand;
   }
 
   // 不明なコマンド

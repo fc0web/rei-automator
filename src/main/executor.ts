@@ -14,6 +14,7 @@ import { ImageMatcher } from '../lib/auto/image-matcher';
 import { VariableStore, preprocessLine } from '../lib/core/variables';
 import { Logger } from '../lib/core/logger';
 import { ErrorHandler } from '../lib/core/error-handler';
+import { WinApiBackend } from '../lib/auto/win-api-backend';
 
 export class ReiExecutor {
   private runtime: ReiRuntime;
@@ -21,6 +22,8 @@ export class ReiExecutor {
   private logger: Logger | null = null;
   private varStore: VariableStore = new VariableStore();
   private useStub: boolean;
+  private executionMode: 'cursor' | 'cursorless' = 'cursor';
+  private targetWindow: string = '';
 
   constructor(useStub = false) {
     this.useStub = useStub;
@@ -42,6 +45,13 @@ export class ReiExecutor {
 
     const controller = new AutoController(backend);
     this.runtime = new ReiRuntime(controller);
+
+    // Phase 8: カーソルなし実行バックエンドの注入（Windows のみ）
+    if (process.platform === 'win32' && !useStub) {
+      const winApi = new WinApiBackend(logFn);
+      this.runtime.setWinApiBackend(winApi);
+      console.log('[Rei] WinApiBackend injected (cursorless execution enabled)');
+    }
 
     // ランタイムコールバックの設定
     this.runtime.setCallbacks({
@@ -155,6 +165,18 @@ export class ReiExecutor {
 
   setCaptureFunc(func: () => Promise<string>): void {
     this.runtime.setCaptureFunc(func);
+  }
+
+  // ── Phase 8: 実行モード切替 ─────────────────────────
+  setExecutionMode(mode: 'cursor' | 'cursorless', targetWindow?: string): void {
+    this.executionMode = mode;
+    if (targetWindow !== undefined) this.targetWindow = targetWindow;
+    console.log(`[Rei] Execution mode: ${mode}${mode === 'cursorless' ? ` → "${this.targetWindow}"` : ''}`);
+    this.runtime.setExecutionMode(mode, this.targetWindow);
+  }
+
+  getExecutionMode(): { mode: string; targetWindow: string } {
+    return { mode: this.executionMode, targetWindow: this.targetWindow };
   }
 
   /**

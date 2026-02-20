@@ -183,4 +183,8 @@ contextBridge.exposeInMainWorld('reiAPI', {
     ipcRenderer.on('log:entry', (_event, entry) => callback(entry)),
   onStepPause: (callback: (entry: unknown) => void) =>
     ipcRenderer.on('log:step-pause', (_event, entry) => callback(entry)),
+
+  // Phase 8: Execution Mode
+  setExecutionMode: (mode: string, targetWindow?: string) =>
+    ipcRenderer.invoke('exec:set-mode', mode, targetWindow),
 });
