@@ -1,14 +1,15 @@
 /**
  * Rei Automator — Daemon Process
- * Phase 9a+9b: スケジューラ統合 + ファイル監視 + REST API + WebSocket
+ * Phase 9a+9b+9d: スケジューラ統合 + ファイル監視 + REST API + WebSocket + クラスタ
  *
- * ★ Phase 9aのdaemon.tsを置き換えてください。
+ * ★ 既存の daemon.ts を置き換えてください。
  *
- * Phase 9bで追加された変更点:
- * - ヘルスHTTPサーバー → ApiServerに置き換え（REST API + WebSocket統合）
- * - 公開メソッド追加（getPublicStats, getTaskList, executeRemote, etc.）
- * - EventEmitter経由でタスクイベントを発火（APIサーバーがWebSocketに中継）
- * - DaemonConfigにAPI関連設定を追加
+ * Phase 9d で追加された変更点:
+ * - NodeManager（ノードディスカバリ・ハートビート・リーダー選出）を統合
+ * - TaskDispatcher（3戦略タスク分配）を統合
+ * - DaemonConfig にクラスタ関連設定を追加
+ * - タスク実行の統計を NodeManager に連携
+ * - 公開メソッド追加（getNodeManager, getTaskDispatcher）
  */
 
 import * as path from 'path';
@@ -20,6 +21,8 @@ import { ReiParser } from '../lib/core/parser';
 import { Logger } from '../lib/core/logger';
 import { ScriptWatcher } from './watcher';
 import { ApiServer } from './api-server';
+import { NodeManager, NodeConfig } from './node-manager';
+import { TaskDispatcher, DispatcherConfig, DispatchStrategy } from './task-dispatcher';
 
 // ─── 型定義 ──────────────────────────────────────────
 
@@ -35,6 +38,14 @@ export interface DaemonConfig {
   apiHost?: string;
   authEnabled?: boolean;
   apiKeyFilePath?: string;
+  // Phase 9d: クラスタ設定
+  clusterEnabled?: boolean;
+  nodeId?: string;
+  nodeName?: string;
+  seedNodes?: string[];        // ["host:port", ...]
+  heartbeatInterval?: number;  // ms (default: 10000)
+  heartbeatTimeout?: number;   // ms (default: 30000)
+  dispatchStrategy?: DispatchStrategy;
 }
 
 export interface TaskEntry {
@@ -72,9 +83,14 @@ export class Daemon extends EventEmitter {
   private errorTasks = 0;
 
   private watcher?: ScriptWatcher;
-  private apiServer?: ApiServer;                     // ★ Phase 9b: APIサーバー
+  private apiServer?: ApiServer;
   private scheduleTimers: Map<string, NodeJS.Timeout> = new Map();
   private parser: ReiParser;
+
+  // ★ Phase 9d: クラスタ
+  private nodeManager?: NodeManager;
+  private taskDispatcher?: TaskDispatcher;
+  private statsUpdateTimer?: NodeJS.Timeout;
 
   constructor(config: DaemonConfig, logger: Logger) {
     super();
@@ -108,7 +124,12 @@ export class Daemon extends EventEmitter {
     // 4. スケジュールタスクの起動
     this.startScheduledTasks();
 
-    // 5. ★ Phase 9b: APIサーバー起動（REST + WebSocket + ヘルス統合）
+    // 5. ★ Phase 9d: クラスタ初期化（API サーバーより先に）
+    if (this.config.clusterEnabled) {
+      this.initCluster();
+    }
+
+    // 6. APIサーバー起動（REST + WebSocket + ヘルス + クラスタAPI 統合）
     this.apiServer = new ApiServer(this, {
       port: this.config.healthPort,
       host: this.config.apiHost || '0.0.0.0',
@@ -118,6 +139,16 @@ export class Daemon extends EventEmitter {
       },
     }, this.logger);
     await this.apiServer.start();
+
+    // 7. ★ Phase 9d: ノードマネージャー開始（APIサーバーが立った後に）
+    if (this.nodeManager) {
+      await this.nodeManager.start();
+      this.startStatsSync();
+      this.logger.info(
+        `Cluster enabled: ${this.nodeManager.getSelf().name} ` +
+        `(${this.nodeManager.getSelf().id}), role: ${this.nodeManager.getSelf().role}`
+      );
+    }
 
     this.logger.info(`Daemon started (PID: ${process.pid})`);
 
@@ -135,12 +166,22 @@ export class Daemon extends EventEmitter {
     }
     this.scheduleTimers.clear();
 
+    // stats同期タイマー停止
+    if (this.statsUpdateTimer) {
+      clearInterval(this.statsUpdateTimer);
+    }
+
+    // ★ Phase 9d: ノードマネージャー停止
+    if (this.nodeManager) {
+      await this.nodeManager.stop();
+    }
+
     // ファイル監視停止
     if (this.watcher) {
       this.watcher.stop();
     }
 
-    // ★ Phase 9b: APIサーバー停止
+    // APIサーバー停止
     if (this.apiServer) {
       await this.apiServer.stop();
     }
@@ -148,14 +189,86 @@ export class Daemon extends EventEmitter {
     this.logger.info('Daemon stopped');
   }
 
-  // ─── ★ Phase 9b: 公開メソッド ────────────────────
+  // ─── ★ Phase 9d: クラスタ初期化 ─────────────────
+
+  private initCluster(): void {
+    const nodeConfig: Partial<NodeConfig> = {
+      nodeId: this.config.nodeId || `node-${Date.now().toString(36)}`,
+      nodeName: this.config.nodeName || `Rei Node (${process.pid})`,
+      listenPort: this.config.healthPort,
+      seedNodes: this.config.seedNodes || [],
+      heartbeatInterval: this.config.heartbeatInterval || 10000,
+      heartbeatTimeout: this.config.heartbeatTimeout || 30000,
+    };
+
+    this.nodeManager = new NodeManager(nodeConfig);
+    this.taskDispatcher = new TaskDispatcher(this.nodeManager, {
+      defaultStrategy: this.config.dispatchStrategy || 'round-robin',
+    });
+
+    // ノードイベントをデーモンイベントとして中継
+    this.nodeManager.on('node:joined', (node: any) => {
+      this.logger.info(`[Cluster] Node joined: ${node.name} (${node.host})`);
+      this.emit('cluster:node:joined', node);
+    });
+
+    this.nodeManager.on('node:offline', (node: any) => {
+      this.logger.warn(`[Cluster] Node offline: ${node.name}`);
+      this.emit('cluster:node:offline', node);
+    });
+
+    this.nodeManager.on('node:left', (node: any) => {
+      this.logger.info(`[Cluster] Node left: ${node.name}`);
+      this.emit('cluster:node:left', node);
+    });
+
+    this.nodeManager.on('leader:elected', (leader: any) => {
+      this.logger.info(`[Cluster] Leader elected: ${leader.name} (${leader.id})`);
+      this.emit('cluster:leader:elected', leader);
+    });
+
+    // ディスパッチイベント
+    this.taskDispatcher.on('dispatch:success', (result: any) => {
+      this.logger.info(
+        `[Dispatch] Success: ${result.taskId} → ${result.targetNodeId} (${result.strategy})`
+      );
+      this.emit('dispatch:success', result);
+    });
+
+    this.taskDispatcher.on('dispatch:error', (result: any) => {
+      this.logger.error(
+        `[Dispatch] Error: ${result.taskId} → ${result.error}`
+      );
+      this.emit('dispatch:error', result);
+    });
+
+    this.logger.info('[Cluster] NodeManager + TaskDispatcher initialized');
+  }
+
+  /**
+   * 定期的にタスク統計をNodeManagerに反映
+   */
+  private startStatsSync(): void {
+    this.statsUpdateTimer = setInterval(() => {
+      if (this.nodeManager) {
+        const activeTasks = Array.from(this.tasks.values()).filter(t => t.running).length;
+        this.nodeManager.updateTaskStats(
+          activeTasks,
+          this.queue.length,
+          this.completedTasks
+        );
+      }
+    }, 5000); // 5秒ごと
+  }
+
+  // ─── 公開メソッド ─────────────────────────────────
 
   /**
    * 統計情報を外部に公開（ApiRoutesから呼ばれる）
    */
   getPublicStats(): any {
     const mem = process.memoryUsage();
-    return {
+    const stats: any = {
       startedAt: this.startedAt,
       uptime: Math.floor((Date.now() - this.startedAt) / 1000),
       activeTasks: Array.from(this.tasks.values()).filter(t => t.running).length,
@@ -166,6 +279,24 @@ export class Daemon extends EventEmitter {
       pid: process.pid,
       memoryMB: mem.heapUsed / (1024 * 1024),
     };
+
+    // ★ Phase 9d: クラスタ情報を統計に追加
+    if (this.nodeManager) {
+      stats.cluster = {
+        enabled: true,
+        nodeId: this.nodeManager.getSelf().id,
+        nodeName: this.nodeManager.getSelf().name,
+        role: this.nodeManager.getSelf().role,
+        isLeader: this.nodeManager.isLeader(),
+        totalNodes: this.nodeManager.getNodes().length,
+        onlineNodes: this.nodeManager.getOnlineNodes().length,
+        leaderId: this.nodeManager.getLeader()?.id || null,
+      };
+    } else {
+      stats.cluster = { enabled: false };
+    }
+
+    return stats;
   }
 
   /**
@@ -194,6 +325,27 @@ export class Daemon extends EventEmitter {
    */
   getWatchDir(): string {
     return this.config.watchDir;
+  }
+
+  /**
+   * ★ Phase 9d: NodeManagerへの参照を返す
+   */
+  getNodeManager(): NodeManager | undefined {
+    return this.nodeManager;
+  }
+
+  /**
+   * ★ Phase 9d: TaskDispatcherへの参照を返す
+   */
+  getTaskDispatcher(): TaskDispatcher | undefined {
+    return this.taskDispatcher;
+  }
+
+  /**
+   * ★ Phase 9d: クラスタが有効かどうか
+   */
+  isClusterEnabled(): boolean {
+    return !!this.nodeManager;
   }
 
   /**
@@ -511,7 +663,8 @@ export class Daemon extends EventEmitter {
         this.logger.info(
           `Heartbeat — uptime: ${Math.floor(uptime / 3_600_000)}h, ` +
           `tasks: ${stats.activeTasks} active / ${stats.completedTasks} completed / ${stats.errorTasks} errors, ` +
-          `memory: ${stats.memoryMB.toFixed(1)}MB`
+          `memory: ${stats.memoryMB.toFixed(1)}MB` +
+          (stats.cluster.enabled ? `, cluster: ${stats.cluster.onlineNodes} nodes, role: ${stats.cluster.role}` : '')
         );
       }
     }
