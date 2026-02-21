@@ -3,6 +3,6 @@
   "compilerOptions": {
     "outDir": "./dist"
   },
-  "include": ["src/main/**/*", "src/lib/**/*", "src/i18n.ts", "src/headless/**/*"],
+  "include": ["src/main/**/*", "src/lib/**/*", "src/i18n.ts", "src/headless/**/*", "src/aios/**/*"],
   "exclude": ["src/renderer/**/*"]
 }

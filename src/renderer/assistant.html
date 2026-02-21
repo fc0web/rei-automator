@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rei AIOS — AI Assistant</title>
+<style>
+/* ── CSS変数（既存テーマ準拠） ── */
+:root {
+  --bg-primary:   #1a1a2e;
+  --bg-secondary: #16213e;
+  --bg-tertiary:  #0f3460;
+  --bg-panel:     #1e1e2e;
+  --bg-sidebar:   #12122a;
+  --accent:       #e94560;
+  --accent-hover: #c73652;
+  --accent-green: #00d4aa;
+  --accent-blue:  #4e8ef7;
+  --text-primary: #e0e0f0;
+  --text-secondary: #9090b0;
+  --text-muted:   #606080;
+  --border:       #2a2a4a;
+  --border-active: #4e8ef7;
+  --radius:       6px;
+  --transition:   0.18s ease;
+  --branch-logical:   #4e8ef7;
+  --branch-practical: #00d4aa;
+  --branch-critical:  #e94560;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Segoe UI', 'Yu Gothic UI', sans-serif;
+  font-size: 13px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ── レイアウト ── */
+.app {
+  display: flex;
+  height: 100vh;
+}
+
+/* ── サイドバー ── */
+.sidebar {
+  width: 260px;
+  background: var(--bg-sidebar);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.sidebar-header {
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.sidebar-header h2 {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 10px;
+}
+
+.btn-new-chat {
+  width: 100%;
+  padding: 8px 12px;
+  background: var(--accent-blue);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 13px;
+  transition: background var(--transition);
+}
+
+.btn-new-chat:hover { background: #3d7de6; }
+
+.session-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.session-item {
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  margin-bottom: 2px;
+  transition: background var(--transition);
+}
+
+.session-item:hover { background: var(--bg-secondary); }
+.session-item.active { background: var(--bg-tertiary); border-left: 3px solid var(--accent-blue); }
+
+.session-item .title {
+  font-size: 12px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.session-item .meta {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 3px;
+}
+
+.session-item .delete-btn {
+  float: right;
+  opacity: 0;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.session-item:hover .delete-btn { opacity: 1; }
+
+/* ── プロバイダー選択 ── */
+.sidebar-footer {
+  padding: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.provider-select {
+  width: 100%;
+  padding: 6px 8px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.provider-status {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.settings-link {
+  display: block;
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--accent-blue);
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.settings-link:hover { text-decoration: underline; }
+
+/* ── メインエリア ── */
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* ── チャットヘッダー ── */
+.chat-header {
+  padding: 10px 20px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 44px;
+}
+
+.chat-header .title { font-size: 14px; font-weight: 600; }
+
+.chat-header .branch-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.chat-header .branch-toggle input { cursor: pointer; }
+
+/* ── メッセージエリア ── */
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+.message {
+  margin-bottom: 20px;
+  max-width: 85%;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; } }
+
+.message.user {
+  margin-left: auto;
+}
+
+.message.user .bubble {
+  background: var(--bg-tertiary);
+  border-radius: 12px 12px 4px 12px;
+  padding: 10px 14px;
+}
+
+.message.assistant .bubble {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 12px 12px 12px 4px;
+  padding: 12px 16px;
+}
+
+.message .bubble p { margin: 0; line-height: 1.65; }
+.message .bubble pre {
+  background: var(--bg-primary);
+  padding: 10px;
+  border-radius: 4px;
+  overflow-x: auto;
+  margin: 8px 0;
+  font-size: 12px;
+}
+
+.message .bubble code {
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 12px;
+}
+
+.message .meta {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  padding: 0 4px;
+}
+
+/* ── 分岐パネル ── */
+.branches {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.branch {
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.branch-header {
+  padding: 8px 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  transition: background var(--transition);
+}
+
+.branch-header:hover { filter: brightness(1.1); }
+
+.branch-header .indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.branch-header .arrow {
+  margin-left: auto;
+  transition: transform var(--transition);
+  font-size: 10px;
+}
+
+.branch.expanded .branch-header .arrow { transform: rotate(90deg); }
+
+.branch-body {
+  padding: 0;
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.25s ease, padding 0.25s ease;
+}
+
+.branch.expanded .branch-body {
+  padding: 10px 12px;
+  max-height: 500px;
+}
+
+.branch-body p {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.branch.logical .branch-header { background: rgba(78, 142, 247, 0.15); color: var(--branch-logical); }
+.branch.logical .indicator { background: var(--branch-logical); }
+
+.branch.practical .branch-header { background: rgba(0, 212, 170, 0.15); color: var(--branch-practical); }
+.branch.practical .indicator { background: var(--branch-practical); }
+
+.branch.critical .branch-header { background: rgba(233, 69, 96, 0.15); color: var(--branch-critical); }
+.branch.critical .indicator { background: var(--branch-critical); }
+
+.branch .confidence {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-left: 8px;
+  font-weight: 400;
+}
+
+/* ── 入力エリア ── */
+.input-area {
+  padding: 16px 20px;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border);
+}
+
+.input-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+}
+
+.input-row textarea {
+  flex: 1;
+  padding: 10px 14px;
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-family: inherit;
+  font-size: 13px;
+  resize: none;
+  min-height: 42px;
+  max-height: 120px;
+  line-height: 1.5;
+  transition: border-color var(--transition);
+}
+
+.input-row textarea:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+}
+
+.btn-send {
+  padding: 10px 20px;
+  background: var(--accent-blue);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  transition: background var(--transition);
+  white-space: nowrap;
+}
+
+.btn-send:hover { background: #3d7de6; }
+.btn-send:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── ローディング ── */
+.loading-dots {
+  display: inline-flex;
+  gap: 4px;
+  padding: 8px 0;
+}
+
+.loading-dots span {
+  width: 6px;
+  height: 6px;
+  background: var(--text-muted);
+  border-radius: 50%;
+  animation: dotPulse 1.2s ease infinite;
+}
+
+.loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+.loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes dotPulse {
+  0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
+  40% { opacity: 1; transform: scale(1); }
+}
+
+/* ── 設定モーダル ── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.modal-overlay.active { display: flex; }
+
+.modal {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 24px;
+  width: 500px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.modal h3 {
+  font-size: 16px;
+  margin-bottom: 16px;
+  color: var(--text-primary);
+}
+
+.modal .form-group {
+  margin-bottom: 14px;
+}
+
+.modal label {
+  display: block;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.modal input, .modal select {
+  width: 100%;
+  padding: 8px 10px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 12px;
+}
+
+.modal .btn-row {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.modal .btn-test {
+  padding: 6px 14px;
+  background: var(--accent-green);
+  color: #000;
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.modal .btn-save {
+  padding: 6px 14px;
+  background: var(--accent-blue);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.modal .btn-close {
+  padding: 6px 14px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.test-result {
+  font-size: 11px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  margin-top: 8px;
+}
+
+.test-result.success { background: rgba(0,212,170,0.15); color: var(--accent-green); }
+.test-result.error { background: rgba(233,69,96,0.15); color: var(--accent); }
+
+/* ── ウェルカムスクリーン ── */
+.welcome {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 40px;
+}
+
+.welcome h1 {
+  font-size: 24px;
+  color: var(--text-primary);
+  margin-bottom: 10px;
+}
+
+.welcome p {
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.8;
+  max-width: 500px;
+}
+
+.welcome .features {
+  margin-top: 20px;
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+}
+
+.welcome .feature-card {
+  padding: 14px 18px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  width: 150px;
+  text-align: center;
+}
+
+.welcome .feature-card .icon { font-size: 24px; margin-bottom: 6px; }
+.welcome .feature-card .label { font-size: 11px; color: var(--text-secondary); }
+
+/* ── スクロールバー ── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <!-- サイドバー -->
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <h2>Rei AIOS</h2>
+      <button class="btn-new-chat" onclick="newChat()">+ New Chat</button>
+    </div>
+    <div class="session-list" id="sessionList"></div>
+    <div class="sidebar-footer">
+      <select class="provider-select" id="providerSelect" onchange="changeProvider(this.value)">
+        <option value="">Loading...</option>
+      </select>
+      <div class="provider-status" id="providerStatus"></div>
+      <a class="settings-link" onclick="openSettings()">⚙ Provider Settings</a>
+    </div>
+  </div>
+
+  <!-- メインエリア -->
+  <div class="main">
+    <div class="chat-header" id="chatHeader" style="display:none">
+      <span class="title" id="chatTitle">New Chat</span>
+      <label class="branch-toggle">
+        <input type="checkbox" id="branchToggle" checked onchange="toggleBranching()">
+        Axiom Branching
+      </label>
+    </div>
+
+    <!-- ウェルカム / メッセージ -->
+    <div class="welcome" id="welcomeScreen">
+      <div>
+        <h1>Rei AIOS</h1>
+        <p>AI Assistant powered by Rei Axiom Branching Engine.<br>
+        1回のAI回答から、論理・実用・批判の3軸で<br>構造的に異なる視点をローカル生成します。</p>
+        <div class="features">
+          <div class="feature-card">
+            <div class="icon">🧠</div>
+            <div class="label">Multi-LLM<br>10+ Providers</div>
+          </div>
+          <div class="feature-card">
+            <div class="icon">⚡</div>
+            <div class="label">Axiom Branch<br>3-Axis Local</div>
+          </div>
+          <div class="feature-card">
+            <div class="icon">💾</div>
+            <div class="label">Local History<br>Full Privacy</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="messages" id="messagesArea" style="display:none"></div>
+
+    <!-- 入力エリア -->
+    <div class="input-area">
+      <div class="input-row">
+        <textarea id="chatInput" rows="1" placeholder="メッセージを入力... (Enter送信 / Shift+Enter改行)"
+          onkeydown="handleKeyDown(event)" oninput="autoResize(this)"></textarea>
+        <button class="btn-send" id="sendBtn" onclick="sendMessage()">送信</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 設定モーダル -->
+<div class="modal-overlay" id="settingsModal">
+  <div class="modal">
+    <h3>Provider Settings</h3>
+    <div class="form-group">
+      <label>Provider</label>
+      <select id="settingsProvider" onchange="loadProviderSettings(this.value)"></select>
+    </div>
+    <div class="form-group">
+      <label>API Key</label>
+      <input type="password" id="settingsApiKey" placeholder="sk-...">
+    </div>
+    <div class="form-group">
+      <label>Base URL</label>
+      <input type="text" id="settingsBaseUrl">
+    </div>
+    <div class="form-group">
+      <label>Model</label>
+      <select id="settingsModel"></select>
+    </div>
+    <div id="testResult"></div>
+    <div class="btn-row">
+      <button class="btn-test" onclick="testConnection()">Test</button>
+      <button class="btn-save" onclick="saveSettings()">Save</button>
+      <button class="btn-close" onclick="closeSettings()">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── State ───────────────────────────────────────────
+let currentSessionId = null;
+let branchingEnabled = true;
+let providers = [];
+let isLoading = false;
+
+// ─── API Layer ───────────────────────────────────────
+// Electron IPC or REST API fallback
+const api = window.aiosAPI || createRestApi();
+
+function createRestApi() {
+  const BASE = 'http://localhost:19720';
+  const headers = () => ({ 'Content-Type': 'application/json' });
+
+  return {
+    chat: async (p) => (await fetch(`${BASE}/api/aios/chat`, { method: 'POST', headers: headers(), body: JSON.stringify(p) })).json(),
+    getSessions: async () => { const r = await (await fetch(`${BASE}/api/aios/sessions`)).json(); return r.sessions || []; },
+    getSession: async (id) => (await fetch(`${BASE}/api/aios/sessions/${id}`)).json(),
+    deleteSession: async (id) => (await fetch(`${BASE}/api/aios/sessions/${id}`, { method: 'DELETE' })).json(),
+    getProviders: async () => (await fetch(`${BASE}/api/aios/providers`)).json(),
+    setActiveProvider: async (id) => (await fetch(`${BASE}/api/aios/active-provider`, { method: 'PUT', headers: headers(), body: JSON.stringify({providerId:id}) })).json(),
+    updateProvider: async (id, u) => (await fetch(`${BASE}/api/aios/providers/${id}`, { method: 'PUT', headers: headers(), body: JSON.stringify(u) })).json(),
+    testProvider: async (id) => (await fetch(`${BASE}/api/aios/providers/${id}/test`, { method: 'POST' })).json(),
+  };
+}
+
+// ─── Init ────────────────────────────────────────────
+async function init() {
+  try {
+    await loadProviders();
+    await loadSessions();
+  } catch (e) {
+    console.error('Init error:', e);
+  }
+}
+
+// ─── Providers ───────────────────────────────────────
+async function loadProviders() {
+  const result = await api.getProviders();
+  providers = result.providers || [];
+  const active = result.activeProvider;
+  const sel = document.getElementById('providerSelect');
+  sel.innerHTML = providers.map(p =>
+    `<option value="${p.id}" ${p.id === active ? 'selected' : ''}>${p.name}</option>`
+  ).join('');
+  document.getElementById('providerStatus').textContent = `Active: ${active}`;
+}
+
+async function changeProvider(id) {
+  await api.setActiveProvider(id);
+  document.getElementById('providerStatus').textContent = `Active: ${id}`;
+}
+
+// ─── Sessions ────────────────────────────────────────
+async function loadSessions() {
+  const sessions = await api.getSessions();
+  const list = document.getElementById('sessionList');
+  if (!sessions || sessions.length === 0) {
+    list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:11px">No conversations yet</div>';
+    return;
+  }
+  list.innerHTML = sessions.map(s => `
+    <div class="session-item ${s.id === currentSessionId ? 'active' : ''}" onclick="loadSession('${s.id}')">
+      <button class="delete-btn" onclick="event.stopPropagation();deleteSession('${s.id}')">&times;</button>
+      <div class="title">${escHtml(s.title)}</div>
+      <div class="meta">${s.provider} · ${s.messageCount} msgs</div>
+    </div>
+  `).join('');
+}
+
+function newChat() {
+  currentSessionId = null;
+  document.getElementById('welcomeScreen').style.display = 'flex';
+  document.getElementById('messagesArea').style.display = 'none';
+  document.getElementById('chatHeader').style.display = 'none';
+  document.querySelectorAll('.session-item').forEach(e => e.classList.remove('active'));
+}
+
+async function loadSession(id) {
+  const session = await api.getSession(id);
+  if (!session) return;
+  currentSessionId = id;
+  document.getElementById('welcomeScreen').style.display = 'none';
+  document.getElementById('messagesArea').style.display = 'block';
+  document.getElementById('chatHeader').style.display = 'flex';
+  document.getElementById('chatTitle').textContent = session.title;
+
+  const area = document.getElementById('messagesArea');
+  area.innerHTML = '';
+  for (const msg of session.messages) {
+    appendMessage(msg.role, msg.content, msg.branches, msg);
+  }
+  area.scrollTop = area.scrollHeight;
+  loadSessions();
+}
+
+async function deleteSession(id) {
+  if (!confirm('Delete this conversation?')) return;
+  await api.deleteSession(id);
+  if (currentSessionId === id) newChat();
+  loadSessions();
+}
+
+// ─── Chat ────────────────────────────────────────────
+async function sendMessage() {
+  const input = document.getElementById('chatInput');
+  const text = input.value.trim();
+  if (!text || isLoading) return;
+
+  isLoading = true;
+  document.getElementById('sendBtn').disabled = true;
+
+  // UIの初期化
+  if (!currentSessionId) {
+    document.getElementById('welcomeScreen').style.display = 'none';
+    document.getElementById('messagesArea').style.display = 'block';
+    document.getElementById('chatHeader').style.display = 'flex';
+    document.getElementById('messagesArea').innerHTML = '';
+  }
+
+  // ユーザーメッセージ表示
+  appendMessage('user', text);
+  input.value = '';
+  autoResize(input);
+
+  // ローディング表示
+  const loadingEl = document.createElement('div');
+  loadingEl.className = 'message assistant';
+  loadingEl.innerHTML = '<div class="bubble"><div class="loading-dots"><span></span><span></span><span></span></div></div>';
+  document.getElementById('messagesArea').appendChild(loadingEl);
+  document.getElementById('messagesArea').scrollTop = document.getElementById('messagesArea').scrollHeight;
+
+  try {
+    const result = await api.chat({
+      message: text,
+      sessionId: currentSessionId,
+      enableBranching: branchingEnabled,
+    });
+
+    // エラーチェック
+    if (result.error) throw new Error(result.error);
+
+    currentSessionId = result.sessionId;
+    loadingEl.remove();
+
+    // アシスタントメッセージ表示
+    appendMessage('assistant', result.content, result.branches, {
+      provider: result.provider,
+      model: result.model,
+      meta: result.meta,
+      usage: result.usage,
+    });
+
+    document.getElementById('chatTitle').textContent =
+      text.slice(0, 40) + (text.length > 40 ? '…' : '');
+    loadSessions();
+  } catch (e) {
+    loadingEl.remove();
+    appendMessage('assistant', `Error: ${e.message}`);
+  }
+
+  isLoading = false;
+  document.getElementById('sendBtn').disabled = false;
+  input.focus();
+}
+
+// ─── Message Rendering ──────────────────────────────
+function appendMessage(role, content, branches, meta) {
+  const area = document.getElementById('messagesArea');
+  const div = document.createElement('div');
+  div.className = `message ${role}`;
+
+  let html = `<div class="bubble">${formatContent(content)}</div>`;
+
+  if (role === 'assistant' && meta) {
+    const parts = [];
+    if (meta.provider) parts.push(meta.provider);
+    if (meta.model) parts.push(meta.model);
+    if (meta.meta) parts.push(`${meta.meta.totalProcessingMs}ms`);
+    if (meta.usage) parts.push(`${meta.usage.inputTokens + meta.usage.outputTokens} tokens`);
+    if (parts.length) html += `<div class="meta">${parts.join(' · ')}</div>`;
+  }
+
+  if (branches && branches.length > 0) {
+    html += '<div class="branches">';
+    for (const b of branches) {
+      html += `
+        <div class="branch ${b.axis}" onclick="this.classList.toggle('expanded')">
+          <div class="branch-header">
+            <span class="indicator"></span>
+            ${escHtml(b.label)}
+            <span class="confidence">${Math.round(b.confidence * 100)}%</span>
+            <span class="arrow">▶</span>
+          </div>
+          <div class="branch-body"><p>${formatContent(b.content)}</p></div>
+        </div>`;
+    }
+    html += '</div>';
+  }
+
+  div.innerHTML = html;
+  area.appendChild(div);
+  area.scrollTop = area.scrollHeight;
+}
+
+function formatContent(text) {
+  if (!text) return '';
+  return escHtml(text)
+    .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\n/g, '<br>');
+}
+
+function escHtml(s) {
+  if (!s) return '';
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ─── Input Handling ──────────────────────────────────
+function handleKeyDown(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+}
+
+function toggleBranching() {
+  branchingEnabled = document.getElementById('branchToggle').checked;
+}
+
+// ─── Settings Modal ─────────────────────────────────
+function openSettings() {
+  const sel = document.getElementById('settingsProvider');
+  sel.innerHTML = providers.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+  loadProviderSettings(sel.value);
+  document.getElementById('settingsModal').classList.add('active');
+}
+
+function closeSettings() {
+  document.getElementById('settingsModal').classList.remove('active');
+}
+
+function loadProviderSettings(id) {
+  const p = providers.find(x => x.id === id);
+  if (!p) return;
+  document.getElementById('settingsApiKey').value = '';
+  document.getElementById('settingsBaseUrl').value = p.baseUrl || '';
+  const mSel = document.getElementById('settingsModel');
+  mSel.innerHTML = (p.availableModels || []).map(m =>
+    `<option value="${m}" ${m === p.defaultModel ? 'selected' : ''}>${m}</option>`
+  ).join('');
+  document.getElementById('testResult').innerHTML = '';
+}
+
+async function testConnection() {
+  const id = document.getElementById('settingsProvider').value;
+  const el = document.getElementById('testResult');
+  el.innerHTML = '<div class="test-result" style="color:var(--text-muted)">Testing...</div>';
+
+  // まずAPIキーを保存してからテスト
+  const apiKey = document.getElementById('settingsApiKey').value;
+  if (apiKey) {
+    await api.updateProvider(id, { apiKey });
+  }
+
+  const result = await api.testProvider(id);
+  if (result.connected) {
+    el.innerHTML = `<div class="test-result success">✓ Connected — ${result.model}</div>`;
+  } else {
+    el.innerHTML = `<div class="test-result error">✗ ${result.error || 'Connection failed'}</div>`;
+  }
+}
+
+async function saveSettings() {
+  const id = document.getElementById('settingsProvider').value;
+  const updates = {};
+  const apiKey = document.getElementById('settingsApiKey').value;
+  const baseUrl = document.getElementById('settingsBaseUrl').value;
+  const model = document.getElementById('settingsModel').value;
+  if (apiKey) updates.apiKey = apiKey;
+  if (baseUrl) updates.baseUrl = baseUrl;
+  if (model) updates.defaultModel = model;
+
+  await api.updateProvider(id, updates);
+  await loadProviders();
+  closeSettings();
+}
+
+// ─── Startup ─────────────────────────────────────────
+init();
+</script>
+</body>
+</html>
