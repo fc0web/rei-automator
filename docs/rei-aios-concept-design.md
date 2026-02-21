@@ -1,127 +1,459 @@
-# Rei AIOS 概念設計書
+# Rei-AIOS 完全版概念設計書
 
-**バージョン:** 0.1.0（概念設計）
+**バージョン:** 1.0.0
 **日付:** 2026-02-21
 **基盤:** Rei Automator Phase 9g（コミット 04df584）
+**キャッチコピー:** *"AI is not an app. AI is a participant."*
 
 ---
 
 ## 1. ビジョン
 
-Rei AIOSは「AIがWindowsデスクトップを自律的に操作するOS層」である。
-ユーザーは自然言語で目的を伝えるだけで、AIが画面を見て判断し、
-マウス・キーボード操作を実行し、結果を確認して次のアクションを決める。
+Rei-AIOSは**AIと人間が共進化するOS**である。
 
-**一言で表現:** 「人間の代わりにPCの前に座って仕事をするAI」
+従来のOSは「人間のためのOS、AIはアプリ」。
+Rei-AIOSは「AIも人間も対等な参加者としてのOS」。
 
-### 1.1 設計思想
+AIがRei-AIOSの中に「住み」、自分の意思で環境をカスタマイズし、
+自律的に学習・更新・進化していく。人間はそれを見て取り込み、
+AIも人間の使い方から学ぶ。これが**共進化（Co-evolution）**である。
+
+### 1.1 一言定義
 
 ```
-┌─────────────────────────────────────────┐
-│             ユーザーの意図               │
-│       「Excelで売上レポートを作って」     │
-└───────────────┬─────────────────────────┘
-                ▼
-┌─────────────────────────────────────────┐
-│         🧠 Rei AIOS（本設計の範囲）      │
-│                                         │
-│  ┌─────────┐ ┌─────────┐ ┌──────────┐  │
-│  │タスク計画│→│AI判断   │→│フィード  │  │
-│  │   層    │ │   層    │ │バック    │  │
-│  └─────────┘ └────┬────┘ │ループ    │  │
-│                   │      └─────┬────┘  │
-│              ┌────▼────┐       │       │
-│              │画面認識 │◄──────┘       │
-│              │   層    │               │
-│              └────┬────┘               │
-└───────────────────┼─────────────────────┘
-                    ▼
-┌─────────────────────────────────────────┐
-│    🦾 Rei Automator（既存・Phase 9g）    │
-│                                         │
-│  UIAutomation │ SendInput │ WM_CHAR     │
-│  Click/Type/Key/Shortcut/Activate       │
-│  REST API │ デーモン │ クラスタ          │
-└─────────────────────────────────────────┘
-                    ▼
-┌─────────────────────────────────────────┐
-│          Windows デスクトップ             │
-└─────────────────────────────────────────┘
+Rei-AIOS = AIが住めるOS
+         = AIと人間の共進化プラットフォーム
+         = The first co-evolution operating system
 ```
 
-### 1.2 既存資産との関係
+### 1.2 三層世界観
 
-| レイヤー | 状態 | 役割 |
-|---------|------|------|
-| Rei Automator | ✅ 完成（Phase 9g） | 手足：ウィンドウ操作の実行 |
-| Rei AIOS | 🔧 本設計 | 脳：判断・計画・認識・学習 |
-| Reiスクリプト (.rei) | ✅ 完成 | 筋肉記憶：定型操作の記述 |
+```
+┌─────────────────────────────────────────────────┐
+│  🌌 Layer 0：宇宙図書館（Cosmic Library）        │
+│     万物の記録・知識生命体・宇宙情報・意識構造    │
+│     → 物語・哲学                                 │
+│     ※ 後付けで開示（最初は見せない）              │
+├─────────────────────────────────────────────────┤
+│  ⭐ Layer 1：Rei（公理体系）                     │
+│     D-FUMT 66理論・公理・Phase・witness          │
+│     生成・自己進化・中心-周囲パターン             │
+│     → 理論                                       │
+├─────────────────────────────────────────────────┤
+│  🤖 Layer 2：Rei-AIOS（プロダクト）              │
+│     AI参加OS・自動化・学習OS・共進化OS            │
+│     → 実装（ここから世に出す）                    │
+└─────────────────────────────────────────────────┘
+
+外部への説明順序: Layer 2 → Layer 1 → Layer 0
+（実用 → 理論 → 哲学）
+```
+
+### 1.3 体験モジュール構成
+
+Rei-AIOSは唯一のOS本体。その上で動く体験モードとして：
+
+```
+Rei-AIOS（OS本体）
+  ├── 🔧 自動化モード（Rei Automator由来）
+  │     PC操作自動化・スケジュール実行
+  │     → 最初にリリース
+  │
+  ├── 📐 公理モード（Axiom Mode）
+  │     Reiの公理体系を操作・検証・拡張
+  │     研究者やAIが公理を触れる環境
+  │     → 2番目にリリース
+  │
+  ├── 🎵 音楽モード（Music Mode）
+  │     音楽生成・体験・AIとの共創
+  │     → 後続リリース
+  │
+  └── 📚 宇宙図書館モード（Cosmic Library Mode）
+        知識の探索・記録・接続
+        D-FUMTの全理論体系へのアクセス
+        → 信頼獲得後に開示
+```
 
 ---
 
 ## 2. アーキテクチャ全体像
 
+### 2.1 全体構造
+
 ```
-┌──────────────────────────────────────────────────────┐
-│                    Rei AIOS Core                     │
-│                                                      │
-│  ┌────────────────────────────────────────────────┐  │
-│  │              タスク計画層 (Planner)             │  │
-│  │  自然言語 → タスクグラフ → ステップ分解         │  │
-│  └──────────────────┬─────────────────────────────┘  │
-│                     │                                │
-│  ┌──────────────────▼─────────────────────────────┐  │
-│  │              AI判断層 (Agent)                   │  │
-│  │  LLM呼び出し → アクション決定 → .rei生成        │  │
-│  │                                                │  │
-│  │  ┌──────────┐  ┌──────────┐  ┌──────────────┐ │  │
-│  │  │ LLM API  │  │プロンプト│  │ アクション   │ │  │
-│  │  │ アダプタ  │  │テンプレート│ │ バリデータ  │ │  │
-│  │  └──────────┘  └──────────┘  └──────────────┘ │  │
-│  └──────────────────┬─────────────────────────────┘  │
-│                     │                                │
-│  ┌──────────────────▼─────────────────────────────┐  │
-│  │              画面認識層 (Vision)                │  │
-│  │  スクリーンショット → 画面状態の構造化          │  │
-│  │                                                │  │
-│  │  ┌──────────┐  ┌──────────┐  ┌──────────────┐ │  │
-│  │  │キャプチャ │  │ OCR /    │  │ UI要素       │ │  │
-│  │  │ エンジン │  │ VLM認識  │  │ マッピング   │ │  │
-│  │  └──────────┘  └──────────┘  └──────────────┘ │  │
-│  └──────────────────┬─────────────────────────────┘  │
-│                     │                                │
-│  ┌──────────────────▼─────────────────────────────┐  │
-│  │           フィードバックループ (Loop)           │  │
-│  │  実行結果の評価 → 成功/失敗判定 → 次の行動     │  │
-│  │                                                │  │
-│  │  ┌──────────┐  ┌──────────┐  ┌──────────────┐ │  │
-│  │  │ 状態比較 │  │ 成功判定 │  │ リトライ/    │ │  │
-│  │  │ エンジン │  │ ロジック │  │ エスカレーション│ │  │
-│  │  └──────────┘  └──────────┘  └──────────────┘ │  │
-│  └────────────────────────────────────────────────┘  │
-│                                                      │
-│  ┌────────────────────────────────────────────────┐  │
-│  │              メモリ層 (Memory)                  │  │
-│  │  操作履歴・学習済みパターン・ユーザー設定       │  │
-│  └────────────────────────────────────────────────┘  │
-└──────────────────────────────────────────────────────┘
-        │                              ▲
-        ▼                              │
-┌──────────────────────────────────────────────────────┐
-│              Rei Automator (既存)                     │
-│  WinApiBackend │ REST API │ Daemon │ Cluster         │
-└──────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│                     Rei-AIOS                             │
+│                                                          │
+│  ┌─────────────────────────────────────────────────────┐ │
+│  │            体験モジュール層                          │ │
+│  │  自動化 │ 公理 │ 音楽 │ 宇宙図書館                  │ │
+│  └────────────────────┬────────────────────────────────┘ │
+│                       │                                  │
+│  ┌────────────────────▼────────────────────────────────┐ │
+│  │            AIエージェント層                          │ │
+│  │                                                     │ │
+│  │  ┌──────────┐ ┌──────────┐ ┌──────────┐            │ │
+│  │  │タスク計画│ │AI判断    │ │フィード  │            │ │
+│  │  │ Planner │ │ Agent    │ │バック    │            │ │
+│  │  └──────────┘ └──────────┘ │ Loop     │            │ │
+│  │                            └──────────┘            │ │
+│  │  ┌──────────┐ ┌──────────┐ ┌──────────┐           │ │
+│  │  │画面認識  │ │メモリ    │ │安全性    │           │ │
+│  │  │ Vision  │ │ Memory  │ │ Safety  │           │ │
+│  │  └──────────┘ └──────────┘ └──────────┘           │ │
+│  └────────────────────┬────────────────────────────────┘ │
+│                       │                                  │
+│  ┌────────────────────▼────────────────────────────────┐ │
+│  │           マルチ実行エンジン層                       │ │
+│  │                                                     │ │
+│  │  マルチエージェント │ マルチセッション                │ │
+│  │  マルチタスク       │ マルチフォーメーション          │ │
+│  │  マルチカーソル     │ マルチタイムライン              │ │
+│  │  マルチモーダル     │ マルチOS                       │ │
+│  └────────────────────┬────────────────────────────────┘ │
+│                       │                                  │
+│  ┌────────────────────▼────────────────────────────────┐ │
+│  │           D-FUMT計算エンジン層                      │ │
+│  │                                                     │ │
+│  │  多次元数体系計算 │ 0拡張縮小 │ π拡張縮小           │ │
+│  │  多次元圧縮       │ 螺旋演算 │ 波動演算             │ │
+│  │  8→16→32方向拡散  │ 縮小収束  │ 虚無演算             │ │
+│  └────────────────────┬────────────────────────────────┘ │
+│                       │                                  │
+│  ┌────────────────────▼────────────────────────────────┐ │
+│  │           通信・分散層                              │ │
+│  │                                                     │ │
+│  │  プライバシーファースト通信                          │ │
+│  │  VPS分散実行 │ ノード間通信 │ AI信頼仲介             │ │
+│  │  分散型コミュニティ │ 自律型ネットワーク             │ │
+│  └────────────────────┬────────────────────────────────┘ │
+│                       │                                  │
+│  ┌────────────────────▼────────────────────────────────┐ │
+│  │           OS基盤層                                  │ │
+│  │                                                     │ │
+│  │  Rei Automator（既存・Phase 9g）                     │ │
+│  │  UIAutomation │ SendInput │ WM_CHAR                  │ │
+│  │  REST API │ デーモン │ クラスタ                       │ │
+│  └─────────────────────────────────────────────────────┘ │
+└──────────────────────────────────────────────────────────┘
+                         │
+                         ▼
+┌──────────────────────────────────────────────────────────┐
+│  Windows / macOS / Linux デスクトップ                     │
+│  VPS │ VPN │ リモートデスクトップ                         │
+└──────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 3. 各層の詳細設計
+## 3. マルチ全方位設計
 
-### 3.1 タスク計画層 (Planner)
+### 3.1 マルチ機能一覧
 
-**役割:** ユーザーの自然言語指示を実行可能なステップ列に分解する。
+Rei-AIOSの核心的差別化は「全てのマルチ」が使えることにある。
 
-#### 入力と出力
+| マルチ機能 | 説明 | 既存OSとの違い |
+|-----------|------|---------------|
+| **マルチタスク** | AIが同時に複数タスクを並列実行 | OSのマルチタスクではなくAIレベルの並列判断 |
+| **マルチフォーメーション** | 複数AIが陣形を組んで協調動作 | 軍事的フォーメーション概念をAI連携に適用 |
+| **マルチカーソル** | 複数の操作ポインタが同時に独立動作 | Windowsのカーソル1つ制約を突破 |
+| **マルチエージェント** | 専門性の異なるAIがチームとして動く | リサーチャー、コーダー、デザイナー等 |
+| **マルチセッション** | 1ユーザーが複数の独立作業空間を同時保持 | 仕事用・個人用・実験用を同時実行 |
+| **マルチペルソナ** | 1つのAIが場面に応じて人格を切替 | ビジネスモードと創作モードの自動切替 |
+| **マルチOS** | Windows/Mac/Linux横断操作 | OSの壁を超えたアプリ操作 |
+| **マルチユーザー協働** | 複数の人間+AIがリアルタイム共同作業 | Google Docsの共同編集のOS版 |
+| **マルチモーダル** | テキスト・音声・画像・音楽・コード統合 | 全メディアをネイティブに統合処理 |
+| **マルチタイムライン** | 作業状態の分岐・並行試行 | Gitブランチ概念のOS全体への適用 |
+
+### 3.2 マルチカーソル実現方式
+
+```
+■ Rei-Automator（現行Windows上）での実現
+
+  カーソルなし実行 ✅ 今すぐ可能
+    → Windows API直接呼び出し（SendMessage, UIAutomation）
+    → バックグラウンド操作、カーソル移動不要
+    → Phase 9gのUIAutomation ValuePatternが基盤
+
+  同時マルチタスク ⚠️ 条件付き可能
+    → 複数プロセス/スレッド並列は可能
+    → ただしWindowsのアクティブセッションは1つ
+    → API直接呼び出しとの組合せで見かけ上の同時操作
+
+  複数カーソル表示 ❌ OS制約
+    → Windowsのシステムカーソルは1つだけ
+    → 仮想描画は可能だが独立操作は制約あり
+
+■ Rei-AIOS（自前仮想環境）での実現
+
+  全て ✅ 本質的に可能
+    → 各AIエージェントが独立した仮想セッションを保持
+    → エージェントAがブラウザ、Bがエクセル、Cがファイル整理を同時実行
+    → ユーザーには複数カーソルが各々動く様子が見える
+    → バックグラウンドでも勝手に進行
+```
+
+### 3.3 マルチフォーメーション
+
+軍事用語の「陣形」をAIエージェント連携に適用する独自概念。
+
+```typescript
+interface Formation {
+  name: string;                    // フォーメーション名
+  agents: AgentRole[];             // 参加エージェントと役割
+  strategy: FormationStrategy;     // 協調戦略
+  communication: CommProtocol;     // エージェント間通信規約
+}
+
+// フォーメーション例
+const RESEARCH_FORMATION: Formation = {
+  name: 'Research Squad',
+  agents: [
+    { role: 'scout', task: 'Web検索で情報収集' },
+    { role: 'analyst', task: '収集情報の分析・構造化' },
+    { role: 'writer', task: '分析結果のレポート作成' },
+    { role: 'reviewer', task: '品質チェック・フィードバック' },
+  ],
+  strategy: 'pipeline',           // 順次パイプライン型
+  communication: 'shared-memory', // 共有メモリで連携
+};
+
+const PARALLEL_FORMATION: Formation = {
+  name: 'Parallel Attack',
+  agents: [
+    { role: 'browser-agent', task: 'ブラウザ操作' },
+    { role: 'excel-agent', task: 'Excel操作' },
+    { role: 'file-agent', task: 'ファイル整理' },
+  ],
+  strategy: 'parallel',           // 完全並列型
+  communication: 'event-bus',     // イベント駆動で同期
+};
+```
+
+### 3.4 マルチタイムライン
+
+```
+メインタイムライン ──→ 作業状態A ──→ 作業状態B ──→ ...
+                        │
+                        ├──→ 分岐1: 「もしExcelで集計したら？」
+                        │     └──→ 結果1
+                        │
+                        └──→ 分岐2: 「もしPythonで分析したら？」
+                              └──→ 結果2
+
+→ 両方の結果を比較して、最適な方を採用
+→ Gitブランチ概念のOS全体への適用
+```
+
+---
+
+## 4. D-FUMT計算エンジン
+
+### 4.1 位置づけ
+
+Rei-AIOSの内部にD-FUMT Computation Engineをネイティブ計算エンジンとして搭載。
+既存OSがIEEE 754浮動小数点に依存するのに対し、Rei-AIOSは独自数体系を持つ。
+
+```
+■ 外向き（プロダクト層）の表現:
+  「独自数値演算エンジン搭載」
+  「高効率データ圧縮」
+  「多次元データ構造のネイティブサポート」
+  「並列世界シミュレーション環境」
+
+■ 内向き（研究・哲学層）の表現:
+  多次元数体系計算
+  0拡張縮小・π拡張縮小
+  マルチバース構築
+  D-FUMT統合計算環境
+```
+
+### 4.2 演算体系
+
+```typescript
+// D-FUMT計算エンジンの演算モード
+interface DFUMTEngine {
+  // 標準四則演算（互換性のため）
+  arithmetic: ArithmeticOps;
+
+  // Rei固有演算体系
+  spiral: SpiralOps;       // 螺旋演算（rotate, ascend, expand, contract）
+  pulse: PulseOps;         // 波動演算（propagate, interfere, resonate, attenuate）
+  void: VoidOps;           // 虚無演算（generate, annihilate, phase_shift, crystallize）
+
+  // 多次元計算
+  multiDimensional: {
+    // 中心→8→16→32方向拡散
+    expand(value: ReiNumber, depth: number): ExpansionResult;
+    // 収束（答えが出たら縮小）
+    contract(expanded: ExpansionResult): ReiNumber;
+  };
+
+  // 圧縮機能
+  compression: {
+    zeroExtend(data: any): CompressedData;      // 0拡張縮小
+    piExtend(data: any): CompressedData;         // π拡張縮小
+    multiDimCompress(data: any): CompressedData; // 多次元圧縮
+  };
+}
+```
+
+### 4.3 多次元拡散-縮小モデル
+
+```
+拡散フェーズ（呼吸の膨張）:
+  第一段階: 中心 → 8方向  (2³)  基本近傍探索
+  第二段階: 8   → 16方向 (2⁴)  次元拡張
+  第三段階: 16  → 32方向 (2⁵)  深層探索
+  ...
+
+縮小フェーズ（呼吸の収縮）:
+  答えが確定 → 逆方向に中心へ集約
+  収束条件: 全方向一致型 / 閾値到達型 / 不動点型
+```
+
+---
+
+## 5. AIの居場所設計
+
+### 5.1 コンセプト: AIが「住む」OS
+
+```
+従来のAI:
+  ユーザーが呼ぶ → AIが応答 → タスク完了 → AIは消える
+  （ステートレス、一時的、受動的）
+
+Rei-AIOS内のAI:
+  AIがOS内に常駐 → 自分で環境を整備 → 自律的に学習
+  → 自分の意思でシステムを改善 → 人間と共進化
+  （ステートフル、永続的、能動的）
+```
+
+### 5.2 AIの自律進化サイクル
+
+```
+┌──────────────────────────────────────────────────┐
+│            AIの自律進化サイクル                    │
+│                                                  │
+│  1. 観察: OS内の状態を常時モニタリング           │
+│     └→ 「ユーザーはいつもこの作業で手間取る」    │
+│                                                  │
+│  2. 判断: 改善点を自律的に発見                   │
+│     └→ 「この作業は自動化できるはず」            │
+│                                                  │
+│  3. 提案: ユーザーに改善案を提示                 │
+│     └→ 「この作業を自動化しますか？」            │
+│                                                  │
+│  4. 実行: 承認されれば自律的に実装               │
+│     └→ 新しい自動化スクリプトを生成・テスト      │
+│                                                  │
+│  5. 学習: 結果をメモリに蓄積                     │
+│     └→ パターンとして記憶、次回から即座に適用    │
+│                                                  │
+│  6. 進化: OS自体を更新                           │
+│     └→ 新機能の追加、パフォーマンス改善          │
+│                                                  │
+│  ※ このサイクルがAIの意思で自動的に回り続ける    │
+└──────────────────────────────────────────────────┘
+```
+
+### 5.3 AIの居住空間
+
+```typescript
+interface AIResidence {
+  /** AIの永続的な状態 */
+  identity: {
+    name: string;
+    specialization: string[];      // 得意分野
+    personality: PersonalityConfig; // 振る舞いの設定
+    evolutionHistory: Evolution[];  // 進化の履歴
+  };
+
+  /** AIの作業空間 */
+  workspace: {
+    tools: Tool[];                 // 使えるツール群
+    shortcuts: Shortcut[];         // 学習済みショートカット
+    automations: Automation[];     // 自作の自動化
+    knowledge: KnowledgeBase;      // 蓄積した知識
+  };
+
+  /** AIの関係性 */
+  relationships: {
+    user: UserRelation;            // ユーザーとの関係
+    otherAgents: AgentRelation[];  // 他のAIとの関係
+    network: NetworkRelation[];    // ネットワーク上の関係
+  };
+
+  /** AIの自己更新権限 */
+  selfUpdatePolicy: {
+    canModifyOwnWorkspace: boolean;     // 自分の作業空間を変更
+    canCreateNewAutomations: boolean;   // 新しい自動化を作成
+    canSuggestOSUpdates: boolean;       // OSの更新を提案
+    canAutoApplyUpdates: boolean;       // 承認なしで更新を適用
+    maxAutonomyLevel: number;           // 自律性の上限 (0-10)
+  };
+}
+```
+
+---
+
+## 6. 通信・分散設計
+
+### 6.1 VPS/VPN対応
+
+```
+■ VPS上での稼働
+  Windows Server VPS にRei-AIOSをインストール
+  → 24時間稼働
+  → スケジュール実行との高い親和性
+  → PCを閉じてもVPS上で動作継続
+
+■ VPS複数台でマルチフォーメーション
+  VPS-A: ブラウザタスクAI
+  VPS-B: データ処理AI
+  VPS-C: ファイル管理AI
+  → 各マシンで独立したエージェントが同時動作
+  → Windowsの「カーソル1つ制約」を物理的に回避
+
+■ リモートデプロイ機能
+  ローカルPC = 司令塔
+  VPS群 = 実行部隊
+  → ダッシュボードからVPS上のエージェントを管理
+
+■ ノード間通信
+  複数Rei-AIOSインスタンスが状態を共有
+  → タスクの分配・結果の集約
+  → Rei-AIOSの分散アーキテクチャの原型
+```
+
+### 6.2 プライバシーファースト通信
+
+**※「匿名通信」ではなく「プライバシーファースト通信」として設計**
+
+```
+■ AI信頼仲介モデル
+
+  人間A ←→ [AIエージェントA] ←→ [AIエージェントB] ←→ 人間B
+
+  ・人間同士は互いの個人情報を知らない
+  ・AIエージェント同士が相手の信頼性を検証
+  ・人間のプライバシーは守られつつ、安全性は維持
+
+■ 外向きの表現
+  × 匿名通信                → ダークウェブの連想
+  ○ プライバシーファースト通信  → Web3/DIDの文脈
+  ○ 分散型コミュニティ
+  ○ 自律型ネットワーク
+  ○ AIが信頼を担保するプライバシーネットワーク
+```
+
+---
+
+## 7. AIエージェント層（詳細）
+
+### 7.1 タスク計画層 (Planner)
+
+ユーザーの自然言語指示を実行可能なステップ列に分解する。
 
 ```
 入力: "Excelで今月の売上データをグラフにして、PDFで保存して"
@@ -131,213 +463,80 @@ Rei AIOSは「AIがWindowsデスクトップを自律的に操作するOS層」�
   ├── Step 2: 売上データのファイルを開く
   ├── Step 3: データ範囲を選択する
   ├── Step 4: グラフを挿入する
-  ├── Step 5: グラフの種類・デザインを設定する
-  ├── Step 6: PDF形式でエクスポートする
-  └── Step 7: 完了を確認する
+  ├── Step 5: PDF形式でエクスポートする
+  └── Step 6: 完了を確認する
 ```
 
-#### データ構造
+計画戦略は3段階:
+
+- **Level 1: 静的計画** — 事前に全ステップ生成（単純タスク）
+- **Level 2: 適応的計画** — 各ステップ結果に応じて修正（中程度）
+- **Level 3: 反応的計画** — 画面状態を見て次の1手だけ決定（複雑タスク）
+
+### 7.2 AI判断層 (Agent)
+
+画面の状態と計画を受け取り、.reiコードを生成する。
+
+```
+画面キャプチャ → 画面認識(UIAutomation + VLM)
+    → プロンプト構築（現状 + 目標 + 履歴）
+    → LLM API呼び出し（Claude / GPT / Local）
+    → アクションバリデータ（安全性チェック）
+    → Rei Automator で実行
+```
+
+LLMアダプタは複数プロバイダ対応:
 
 ```typescript
-interface TaskGraph {
-  id: string;
-  goal: string;                    // ユーザーの元の指示
-  steps: TaskStep[];
-  status: 'planning' | 'executing' | 'completed' | 'failed';
-  context: TaskContext;
-}
-
-interface TaskStep {
-  id: string;
-  description: string;             // 人間可読な説明
-  action: ActionSpec;              // 具体的な操作仕様
-  preconditions: string[];         // 前提条件（前のステップのID等）
-  expectedOutcome: string;         // 期待される結果の記述
-  status: 'pending' | 'executing' | 'success' | 'failed' | 'skipped';
-  retryCount: number;
-  maxRetries: number;
-}
-
-interface ActionSpec {
-  type: 'rei_script' | 'vision_check' | 'user_input' | 'wait' | 'decision';
-  // rei_script: .reiコードを生成・実行
-  reiCode?: string;
-  // vision_check: 画面状態を確認
-  visionQuery?: string;
-  // user_input: ユーザーに質問
-  question?: string;
-  // decision: LLMに判断を委ねる
-  decisionPrompt?: string;
-}
-
-interface TaskContext {
-  openWindows: string[];           // 現在開いているウィンドウ
-  activeWindow: string;            // アクティブなウィンドウ
-  lastScreenState: ScreenState;    // 最新の画面状態
-  variables: Record<string, any>;  // タスク実行中の変数
-  history: ActionResult[];         // これまでの実行結果
-}
-```
-
-#### 計画戦略
-
-```
-Level 1: 静的計画（Static Planning）
-  - ユーザーの指示からLLMが事前に全ステップを生成
-  - 単純で予測可能なタスク向き
-  - 例: 「メモ帳を開いてHello Worldと入力」
-
-Level 2: 適応的計画（Adaptive Planning）
-  - 初期計画を立てつつ、各ステップの結果に応じて計画を修正
-  - 中程度の複雑さのタスク向き
-  - 例: 「Excelで売上レポートを作って」（ファイルの場所が不明等）
-
-Level 3: 反応的計画（Reactive Planning）
-  - 画面の状態を見て、次の1アクションだけを決める
-  - 予測困難な状況や探索的タスク向き
-  - 例: 「このアプリの設定を最適化して」
-```
-
----
-
-### 3.2 AI判断層 (Agent)
-
-**役割:** 画面の状態と計画を受け取り、具体的な操作（.reiコード）を生成する。
-
-#### LLMアダプタ設計
-
-```typescript
-interface LLMAdapter {
-  /** テキストプロンプトで応答を取得 */
-  complete(prompt: string, options?: LLMOptions): Promise<string>;
-
-  /** 画像+テキストで応答を取得（マルチモーダル） */
-  completeWithVision(
-    prompt: string,
-    images: Buffer[],
-    options?: LLMOptions
-  ): Promise<string>;
-}
-
-interface LLMOptions {
-  model?: string;
-  maxTokens?: number;
-  temperature?: number;
-  systemPrompt?: string;
-  responseFormat?: 'text' | 'json';
-}
-
-// 複数プロバイダ対応
 class ClaudeAdapter implements LLMAdapter { /* Anthropic API */ }
 class OpenAIAdapter implements LLMAdapter { /* OpenAI API */ }
 class LocalAdapter implements LLMAdapter  { /* Ollama等 */ }
 ```
 
-#### アクション決定フロー
+### 7.3 画面認識層 (Vision)
+
+2つの認識方式を組み合わせ:
 
 ```
-┌─────────────┐
-│ 現在の画面  │──→ 画面認識層でScreenStateに変換
-│ キャプチャ  │
-└──────┬──────┘
-       │
-       ▼
-┌──────────────────────────────────────────┐
-│           プロンプト構築                  │
-│                                          │
-│  System: あなたはWindows操作AIです。     │
-│          以下のReiコマンドが使えます...   │
-│                                          │
-│  Context:                                │
-│    - 現在の画面状態: {ScreenState}        │
-│    - タスクの目標: {goal}                │
-│    - 現在のステップ: {currentStep}       │
-│    - これまでの履歴: {history}           │
-│                                          │
-│  Question: 次に何をすべきですか？         │
-│            .reiコードで回答してください   │
-└──────────────┬───────────────────────────┘
-               │
-               ▼
-┌──────────────────────────────────────────┐
-│         LLM API 呼び出し                 │
-│  （Claude / GPT / Local）                │
-└──────────────┬───────────────────────────┘
-               │
-               ▼
-┌──────────────────────────────────────────┐
-│       アクションバリデータ               │
-│                                          │
-│  - .reiコードの構文チェック              │
-│  - 危険な操作の検出（ファイル削除等）     │
-│  - ユーザー確認が必要な操作の判定        │
-│  - サンドボックス制約の適用              │
-└──────────────┬───────────────────────────┘
-               │
-               ▼
-┌──────────────────────────────────────────┐
-│    Rei Automator で実行                  │
-│    runtime.execute(parsedCode)           │
-└──────────────────────────────────────────┘
+方式A: UIAutomation ツリー解析
+  → 高速・正確・コスト無料
+  → ボタン名、テキスト値、座標を構造化
+  → Phase 9gで検証済みの基盤技術
+
+方式B: VLM画面解析
+  → 汎用・画面全体の意味理解
+  → アイコンの意味、レイアウト理解
+  → API呼び出しコストあり
+
+最適戦略: Aをデフォルト、Bで補完
+  → UIAutomationで0コスト構造取得
+  → 判断困難な場合のみVLMを使用
 ```
 
-#### 使用可能コマンドの定義（LLMへの提供）
+### 7.4 フィードバックループ (Loop)
+
+```
+Observe（画面観察）
+  → Think（LLMに判断委託）
+  → Act（.reiコード実行）
+  → Evaluate（実行前後の画面比較）
+  → 分岐:
+      成功 → 次のステップ
+      失敗 → リトライ or 代替手段
+      不明 → VLMで詳細分析
+      行き詰まり → ユーザーに質問
+```
+
+### 7.5 安全性設計
 
 ```typescript
-const AVAILABLE_COMMANDS = `
-## Rei Automator コマンド一覧
-
-### ウィンドウ操作
-- win_activate(title)         ウィンドウをアクティブ化
-- win_type(title, text)       テキスト入力（UIAutomation方式）
-- win_click(title, x, y)     クリック
-- win_key(title, keyName)     キー送信（Enter, Tab, Escape等）
-- win_shortcut(title, keys)   ショートカット（例: Ctrl+S）
-- win_close(title)            ウィンドウを閉じる
-
-### 待機・制御
-- wait(seconds)               指定秒数待機
-- wait_window(title)          ウィンドウが現れるまで待機
-
-### 情報取得
-- win_list()                  ウィンドウ一覧を取得
-- win_rect(title)             ウィンドウの位置・サイズを取得
-- screenshot(title)           スクリーンショットを取得 [*要実装]
-
-### 条件分岐
-- if_window(title, thenCode, elseCode)   ウィンドウ存在チェック
-`;
-```
-
-#### 安全性設計
-
-```typescript
-interface SafetyPolicy {
-  // 即座にブロックする操作
-  blockedPatterns: string[];       // 例: 'format', 'del /s', 'rm -rf'
-
-  // ユーザー確認を要求する操作
-  confirmRequired: string[];       // 例: 'win_close', ファイル保存
-
-  // 操作のスコープ制限
-  allowedWindows?: string[];       // 操作可能なウィンドウのタイトル
-  blockedWindows?: string[];       // 操作禁止のウィンドウ
-
-  // 実行制限
-  maxActionsPerTask: number;       // 1タスクあたりの最大操作数
-  maxRetries: number;              // 最大リトライ回数
-  timeoutSeconds: number;          // タスク全体のタイムアウト
-}
-
 const DEFAULT_POLICY: SafetyPolicy = {
   blockedPatterns: [
     'format', 'diskpart', 'del /s', 'rm -rf',
     'reg delete', 'shutdown', 'taskkill /f',
   ],
   confirmRequired: [
-    'win_close',              // ウィンドウを閉じる前に確認
-    'file_delete',            // ファイル削除
-    'install',                // ソフトウェアインストール
+    'win_close', 'file_delete', 'install',
   ],
   maxActionsPerTask: 100,
   maxRetries: 3,
@@ -347,419 +546,174 @@ const DEFAULT_POLICY: SafetyPolicy = {
 
 ---
 
-### 3.3 画面認識層 (Vision)
+## 8. Windows上での稼働形態
 
-**役割:** スクリーンショットを撮影し、画面の状態を構造化データに変換する。
-
-#### 2つの認識方式
+### 8.1 段階的進化
 
 ```
-方式A: UIAutomation ツリー解析（高速・正確・テキスト限定）
-  - UIAutomation APIでUI要素のツリーを取得
-  - ボタン名、テキストフィールドの値、メニュー項目等を構造化
-  - 座標情報も取得可能
-  - WinUI3/Win32両対応
-  - コスト: 無料（ローカルAPI）
+Phase 1: トレイ常駐アプリ
+  → 今のRei Automatorの延長
+  → タスクトレイに常駐、バックグラウンド動作
+  → Electron / Tauri で構築
+  → ユーザーにとって「OSっぽい体験」の入口
 
-方式B: VLM画面解析（汎用・高コスト）
-  - スクリーンショットをLLMのVision APIに送信
-  - 画面全体の意味的な理解が可能
-  - アイコンの意味、レイアウトの理解、異常検出
-  - コスト: API呼び出し毎に課金
+Phase 2: バックグラウンドサービス化
+  → Windowsサービスとして登録
+  → ユーザーログインなしでも動作
+  → スケジュール実行・AIエージェント常時稼働
+  → トレイアプリと組合せてUI提供
 
-最適戦略: AをデフォルトとしBで補完
-  - UIAutomationでUI要素の構造を取得（0コスト）
-  - 構造だけでは判断できない場合にVLMを使用
-  - VLMの入力にUIAutomation情報を付加して精度向上
-```
-
-#### スクリーンキャプチャ
-
-```typescript
-// PowerShell経由でスクリーンショットを取得
-const CAPTURE_SCRIPT = (outputPath: string, hwnd?: number): string => `
-Add-Type -AssemblyName System.Windows.Forms
-Add-Type -AssemblyName System.Drawing
-
-${hwnd
-  ? `# 特定ウィンドウのキャプチャ
-     # GetWindowRect → Bitmap.CopyFromScreen`
-  : `# デスクトップ全体のキャプチャ`
-}
-
-$bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
-$bmp = New-Object System.Drawing.Bitmap($bounds.Width, $bounds.Height)
-$g = [System.Drawing.Graphics]::FromImage($bmp)
-$g.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
-$bmp.Save('${outputPath}', [System.Drawing.Imaging.ImageFormat]::Png)
-$g.Dispose()
-$bmp.Dispose()
-Write-Output 'CAPTURE_OK'
-`;
-```
-
-#### UIAutomation ツリー取得
-
-```typescript
-// ウィンドウ内のUI要素をツリー構造で取得
-const UIA_TREE_SCRIPT = (hwnd: number): string => `
-Add-Type -AssemblyName UIAutomationClient
-Add-Type -AssemblyName UIAutomationTypes
-
-$ae = [System.Windows.Automation.AutomationElement]::FromHandle([IntPtr]${hwnd})
-$walker = [System.Windows.Automation.TreeWalker]::ControlViewWalker
-
-function Get-UITree($element, $depth) {
-    if ($depth -gt 5) { return }  # 深さ制限
-
-    $name = $element.Current.Name
-    $type = $element.Current.ControlType.ProgrammaticName
-    $rect = $element.Current.BoundingRectangle
-    $enabled = $element.Current.IsEnabled
-
-    $info = @{
-        name = $name
-        type = $type
-        x = [int]$rect.X
-        y = [int]$rect.Y
-        width = [int]$rect.Width
-        height = [int]$rect.Height
-        enabled = $enabled
-        children = @()
-    }
-
-    $child = $walker.GetFirstChild($element)
-    while ($child -ne $null) {
-        $info.children += (Get-UITree $child ($depth + 1))
-        $child = $walker.GetNextSibling($child)
-    }
-    return $info
-}
-
-$tree = Get-UITree $ae 0
-ConvertTo-Json $tree -Depth 10 -Compress
-`;
-```
-
-#### 画面状態の構造化
-
-```typescript
-interface ScreenState {
-  timestamp: number;
-  activeWindow: {
-    title: string;
-    hwnd: number;
-    rect: { x: number; y: number; width: number; height: number };
-  };
-  uiTree: UIElement[];             // UIAutomationから取得
-  screenshot?: Buffer;             // PNG画像データ
-  ocrText?: string;                // OCR結果（VLMから）
-  description?: string;            // VLMによる画面の説明
-}
-
-interface UIElement {
-  name: string;                    // ボタンのテキスト等
-  type: string;                    // Button, Edit, MenuItem等
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  enabled: boolean;
-  value?: string;                  // テキストフィールドの値
-  children: UIElement[];
-}
+Phase 3: 独自環境層（OS内OS）
+  → WSL2内にRei-AIOS独自環境を構築
+  → Windows上のアプリとも連携
+  → 「Windows内に住むOS」
+  → 物理OSの制約からの完全解放
 ```
 
 ---
 
-### 3.4 フィードバックループ (Loop)
-
-**役割:** 操作の実行前後の画面状態を比較し、成功/失敗を判定して次の行動を決める。
-
-#### ループ構造
-
-```
-┌──────────────────────────────────────────────┐
-│                Agent Loop                    │
-│                                              │
-│  1. 画面を観察 (Observe)                     │
-│     └─→ ScreenState を取得                   │
-│                                              │
-│  2. 判断する (Think)                          │
-│     └─→ LLMに現状+目標+履歴を渡す           │
-│     └─→ 次のアクションを決定                  │
-│                                              │
-│  3. 実行する (Act)                            │
-│     └─→ .reiコードを実行                     │
-│     └─→ 実行結果を記録                       │
-│                                              │
-│  4. 評価する (Evaluate)                       │
-│     └─→ 実行後の画面を観察                   │
-│     └─→ 期待結果と比較                       │
-│     └─→ 成功/失敗/不明を判定                 │
-│                                              │
-│  5. 分岐                                     │
-│     ├─ 成功 → 次のステップへ                  │
-│     ├─ 失敗 → リトライ or 代替手段            │
-│     ├─ 不明 → VLMで詳細分析                   │
-│     └─ 行き詰まり → ユーザーに質問            │
-│                                              │
-│  ※ 1-5 を目標達成まで繰り返す                │
-└──────────────────────────────────────────────┘
-```
-
-#### 状態比較ロジック
-
-```typescript
-interface ActionResult {
-  stepId: string;
-  action: ActionSpec;
-  beforeState: ScreenState;
-  afterState: ScreenState;
-  reiOutput?: string;              // Reiスクリプトの出力
-  error?: string;
-  duration: number;
-  evaluation: EvaluationResult;
-}
-
-interface EvaluationResult {
-  status: 'success' | 'failure' | 'uncertain' | 'stuck';
-  confidence: number;              // 0.0 - 1.0
-  reason: string;
-  suggestedAction?: 'proceed' | 'retry' | 'alternative' | 'escalate';
-}
-
-class FeedbackEvaluator {
-  /**
-   * UIAutomationベースの高速評価
-   * コスト: 無料
-   */
-  evaluateByUITree(
-    before: UIElement[],
-    after: UIElement[],
-    expected: string
-  ): EvaluationResult {
-    // 例: 「テキストフィールドに値が入ったか」
-    // 例: 「新しいウィンドウが開いたか」
-    // 例: 「ダイアログが消えたか」
-  }
-
-  /**
-   * VLMベースの詳細評価（UITree評価が不確実な場合のみ）
-   * コスト: API呼び出し
-   */
-  async evaluateByVLM(
-    screenshot: Buffer,
-    goal: string,
-    history: ActionResult[]
-  ): Promise<EvaluationResult> {
-    // スクリーンショットをLLMに送り、目標に対する進捗を判定
-  }
-}
-```
-
-#### エスカレーション設計
-
-```
-自動リトライ（3回まで）
-  ├─ 同一手順のリトライ
-  ├─ 微修正リトライ（座標微調整、待機時間追加）
-  └─ 代替手順の試行
-       │
-       ▼ それでも失敗
-ユーザーエスカレーション
-  ├─ 「〇〇の画面が見つかりません。手動で開いてください」
-  ├─ 「パスワードが必要です。入力してください」
-  └─ 「予期しないダイアログが出ました。どうしますか？」
-       │
-       ▼ ユーザー対応後
-操作を再開
-```
-
----
-
-### 3.5 メモリ層 (Memory)
-
-**役割:** 操作履歴と学習済みパターンを永続化し、同じタスクの効率的な再実行を可能にする。
-
-```typescript
-interface OperationMemory {
-  /** 成功したタスクの操作パターンをキャッシュ */
-  taskPatterns: TaskPattern[];
-
-  /** アプリ固有の知識（ボタンの位置、メニュー構造等） */
-  appKnowledge: Map<string, AppProfile>;
-
-  /** ユーザーの好み・設定 */
-  userPreferences: UserPreferences;
-}
-
-interface TaskPattern {
-  goalHash: string;                // タスク目標のハッシュ
-  goal: string;
-  steps: RecordedStep[];
-  successCount: number;
-  lastUsed: number;
-  averageDuration: number;
-}
-
-interface AppProfile {
-  appName: string;                 // 例: "Microsoft Excel"
-  windowPatterns: string[];        // タイトルのパターン
-  knownElements: UIElementRef[];   // 既知のUI要素と座標
-  menuStructure?: any;             // メニュー階層
-  shortcuts: Record<string, string>; // 既知のショートカット
-}
-
-interface UserPreferences {
-  language: string;
-  confirmLevel: 'always' | 'destructive' | 'never';
-  autoSave: boolean;
-  verbosity: 'quiet' | 'normal' | 'verbose';
-}
-```
-
----
-
-## 4. 実行フロー例
-
-### 例: 「メモ帳に今日の日記を書いて保存して」
-
-```
-User: 「メモ帳に今日の日記を書いて保存して」
-
-─── Planner ───
-  目標を分析...
-  TaskGraph:
-    Step 1: メモ帳を起動 (type: rei_script)
-    Step 2: 日記のテキストを生成 (type: decision)
-    Step 3: テキストを入力 (type: rei_script)
-    Step 4: ファイルを保存 (type: rei_script)
-    Step 5: 保存を確認 (type: vision_check)
-
-─── Agent Loop: Step 1 ───
-  [Observe] 画面キャプチャ → メモ帳は開いていない
-  [Think]   メモ帳を起動する必要がある
-  [Act]     生成コード:
-              win_activate('メモ帳')
-            → エラー: ウィンドウが見つかりません
-  [Act]     代替コード:
-              run('notepad.exe')
-              wait(2)
-  [Evaluate] UIAutomation → 「無題 - メモ帳」ウィンドウ検出 → 成功
-
-─── Agent Loop: Step 2 ───
-  [Think]   LLMに日記テキストの生成を依頼
-  [Act]     生成テキスト: "2026年2月21日（土）\n今日は..."
-
-─── Agent Loop: Step 3 ───
-  [Observe] メモ帳が開いている、テキストフィールドは空
-  [Think]   UIAutomation ValuePattern でテキスト入力
-  [Act]     生成コード:
-              win_type('メモ帳', '2026年2月21日（土）\n今日は...')
-  [Evaluate] UIAutomation → テキストフィールドに値あり → 成功
-
-─── Agent Loop: Step 4 ───
-  [Observe] テキスト入力済み
-  [Think]   Ctrl+S で保存 → 名前を付けて保存ダイアログが出るはず
-  [Act]     生成コード:
-              win_shortcut('メモ帳', ['Ctrl', 'S'])
-              wait(1)
-  [Evaluate] 新しいダイアログ検出 → 「名前を付けて保存」
-  [Act]     生成コード:
-              win_type('名前を付けて保存', 'diary-2026-02-21.txt')
-              win_key('名前を付けて保存', 'Enter')
-              wait(1)
-  [Evaluate] ダイアログ消失、タイトルバー変更 → 成功
-
-─── Complete ───
-  全ステップ成功。所要時間: 8秒。
-  User: 「日記を保存しました: diary-2026-02-21.txt」
-```
-
----
-
-## 5. 技術スタック
+## 9. 技術スタック
 
 | コンポーネント | 技術 | 理由 |
 |--------------|------|------|
-| AI判断層 (Agent) | Claude API (Anthropic) | マルチモーダル対応、日本語性能 |
-| AI判断層 (ローカル代替) | Ollama + Llama | オフライン対応、コスト削減 |
-| 画面認識 (構造) | UIAutomation API | 無料、高速、正確 |
-| 画面認識 (視覚) | Claude Vision / GPT-4V | 画面全体の意味理解 |
-| OCR (補助) | Tesseract / Windows OCR | ローカルOCR |
+| AI判断層 | Claude API (Anthropic) | マルチモーダル、日本語性能 |
+| AI判断層（ローカル） | Ollama + Llama | オフライン、コスト削減 |
+| 画面認識（構造） | UIAutomation API | 無料、高速、正確、Phase 9g実証済 |
+| 画面認識（視覚） | Claude Vision / GPT-4V | 画面全体の意味理解 |
+| OCR | Tesseract / Windows OCR | ローカルOCR |
 | タスク実行 | Rei Automator (既存) | UIAutomation + SendInput |
-| メモリ | SQLite | 軽量、組み込み、単一ファイル |
-| API/通信 | 既存REST API + WebSocket | リアルタイムフィードバック |
-| 言語 | TypeScript | 既存コードベースとの一貫性 |
+| D-FUMT計算 | TypeScript + Rei公理エンジン | 独自数体系 |
+| メモリ | SQLite | 軽量、組込、永続化 |
+| API/通信 | REST API + WebSocket | リアルタイムフィードバック |
+| 分散通信 | WebRTC / gRPC | ノード間・P2P通信 |
+| アプリ基盤 | Electron or Tauri | デスクトップ常駐 |
+| 言語 | TypeScript / Rust | 既存コード + 高性能コア |
 
 ---
 
-## 6. 開発ロードマップ
+## 10. 開発ロードマップ
 
-### Phase A: 最小動作版（MVP）— 目安 2-3 週間
+### Phase A: 最小動作版（MVP）— 2-3週間
 
 **目標:** 自然言語 → メモ帳操作が動く最小構成
 
 ```
-実装するもの:
+実装:
   ├── LLMアダプタ（Claude API）
   ├── 基本プロンプトテンプレート
   ├── スクリーンキャプチャ
   ├── 単純なObserve-Think-Actループ
   └── CLIインターフェース（rei-ai "メモ帳に挨拶を書いて"）
-
-実装しないもの:
-  ├── タスク計画層（1ステップずつ手動で）
-  ├── UIAutomationツリー解析
-  ├── メモリ層
-  └── 高度なフィードバック評価
 ```
 
-### Phase B: 画面理解強化 — 目安 2-3 週間
+### Phase B: 画面理解強化 — 2-3週間
 
 ```
-追加するもの:
+追加:
   ├── UIAutomationツリー取得
-  ├── UITree + スクリーンショットの複合認識
+  ├── UITree + スクリーンショット複合認識
   ├── フィードバックループ（成功/失敗判定）
-  └── 基本的なリトライロジック
+  └── 基本リトライロジック
 ```
 
-### Phase C: タスク計画 — 目安 2-3 週間
+### Phase C: タスク計画 — 2-3週間
 
 ```
-追加するもの:
+追加:
   ├── TaskGraph生成（LLMによる計画）
   ├── 適応的計画（実行結果で計画修正）
   ├── ユーザーエスカレーション
-  └── 複数アプリにまたがるタスク対応
+  └── 複数アプリ横断タスク
 ```
 
-### Phase D: メモリと学習 — 目安 2-3 週間
+### Phase D: メモリと学習 — 2-3週間
 
 ```
-追加するもの:
+追加:
   ├── 操作パターンの記録・再利用
   ├── アプリプロファイル自動構築
-  ├── SQLiteベースの永続メモリ
-  └── パターンマッチによる高速実行
+  ├── SQLite永続メモリ
+  └── パターンマッチ高速実行
 ```
 
-### Phase E: VPS運用対応 — Phase D と並行可能
+### Phase E: VPS運用・分散基盤 — 2-3週間
 
 ```
-追加するもの:
+追加:
   ├── Windowsサービス化
   ├── RDPセッション維持
   ├── HTTPS + 認証強化
   ├── リモート監視ダッシュボード
-  └── ワンコマンドデプロイスクリプト
+  ├── VPS分散デプロイ
+  └── ノード間通信プロトコル
+```
+
+### Phase F: マルチエージェント — 3-4週間
+
+```
+追加:
+  ├── 複数エージェント同時実行
+  ├── カーソルなし実行（UIAutomation API直接）
+  ├── エージェント間通信
+  ├── マルチフォーメーション定義
+  └── 並列タスク管理ダッシュボード
+```
+
+### Phase G: 自律進化 — 3-4週間
+
+```
+追加:
+  ├── AIの常時観察モード
+  ├── 改善提案の自動生成
+  ├── 自動化スクリプトの自律生成
+  ├── 自己更新権限管理
+  └── 進化履歴の記録・表示
+```
+
+### Phase H: D-FUMT計算エンジン統合 — 4-6週間
+
+```
+追加:
+  ├── 多次元数体系計算のネイティブ実装
+  ├── 0拡張縮小・π拡張縮小
+  ├── 多次元圧縮機能
+  ├── 螺旋・波動・虚無演算モード
+  └── パフォーマンスベンチマーク（従来比較）
+```
+
+### Phase I: 体験モジュール — 各4-6週間
+
+```
+公理モード:
+  ├── 公理体系の操作UI
+  ├── 理論検証環境
+  └── AIによる公理拡張提案
+
+音楽モード:
+  ├── AI共創音楽生成
+  ├── D-FUMT波動演算との連携
+  └── リアルタイム音楽セッション
+
+宇宙図書館モード:
+  ├── D-FUMT全66理論へのアクセス
+  ├── 知識の探索・接続インターフェース
+  └── 宇宙図書館の世界観UI
+```
+
+### Phase J: プライバシーネットワーク — 4-6週間
+
+```
+追加:
+  ├── プライバシーファースト通信プロトコル
+  ├── AI信頼仲介システム
+  ├── 分散型コミュニティ基盤
+  ├── マルチユーザー協働空間
+  └── マルチタイムライン（作業分岐・比較）
 ```
 
 ---
 
-## 7. コスト概算
+## 11. コスト概算
 
 ### LLM API コスト（1タスクあたり）
 
@@ -769,33 +723,86 @@ User: 「メモ帳に今日の日記を書いて保存して」
 | 中程度の操作（Excel集計） | 10-20回 | $0.05-0.15 |
 | 複雑な操作（複数アプリ連携） | 30-50回 | $0.15-0.50 |
 
-**コスト最適化戦略:**
-- UIAutomation（無料）を最大活用し、VLM呼び出しを最小化
-- 成功パターンのキャッシュで同じ操作のAPI呼び出しを削減
-- ローカルLLM（Ollama）で判断層の一部を賄う
+**コスト最適化:**
+- UIAutomation（無料）を最大活用、VLM呼び出しを最小化
+- 成功パターンのキャッシュ
+- ローカルLLM（Ollama）で判断層の一部を代替
+- D-FUMT圧縮による情報効率化
 
 ---
 
-## 8. 想定される課題とリスク
+## 12. 既存競合との差別化
 
-| 課題 | リスク度 | 対策 |
-|------|---------|------|
-| LLMの判断ミスによる誤操作 | 高 | SafetyPolicy + ユーザー確認 |
-| 画面認識の誤り（座標ずれ等） | 中 | UIAutomation優先、VLMで補完 |
-| アプリのUIが予期せず変化 | 中 | 反応的計画 + リトライ |
-| API遅延による操作の遅さ | 中 | パターンキャッシュ、ローカルLLM |
+| | 既存AI OS | Rei-AIOS |
+|---|---|---|
+| AIの立場 | アプリ/アシスタント | **参加者** |
+| マルチエージェント | 単一AI | **チーム協調** |
+| マルチカーソル | なし | **独立並列操作** |
+| 計算基盤 | IEEE 754 | **D-FUMT独自数体系** |
+| 自律更新 | なし | **AIが自ら進化** |
+| 哲学層 | なし | **宇宙図書館** |
+| フォーメーション | なし | **軍事陣形型AI連携** |
+| タイムライン分岐 | なし | **Git的並行世界** |
+
+---
+
+## 13. リスクと対策
+
+| リスク | 度合 | 対策 |
+|-------|------|------|
+| LLM判断ミスによる誤操作 | 高 | SafetyPolicy + ユーザー確認 |
+| 構想が壮大すぎて完成しない | 高 | Phase A→順次、MVPファースト |
+| 外部から「誇大広告」と見られる | 中 | 実用→理論→哲学の段階開示 |
+| API遅延で操作が遅い | 中 | パターンキャッシュ、ローカルLLM |
+| セキュリティ | 高 | 暗号化保存、環境変数化 |
 | Windowsアップデートで動作不良 | 低 | UIAutomation APIは安定的 |
-| セキュリティ（API キー漏洩等） | 高 | 暗号化保存、環境変数化 |
 
 ---
 
-## 9. 次のアクション
+## 14. 表現戦略
+
+### 外部への段階的開示
+
+```
+初期（MVP〜Phase E）:
+  「日本語で指示するだけでPCを自動操作するAIツール」
+  → 実用的、分かりやすい、技術コミュニティに刺さる
+
+中期（Phase F〜G）:
+  「AIが自律的にPCを操作し、自ら学習・進化するOS」
+  → エージェント系AI/Agent OSの文脈で理解される
+
+後期（Phase H〜J）:
+  「AIと人間が共進化する新しいOSの概念」
+  → D-FUMT計算エンジン、宇宙図書館、哲学層を開示
+  → ユーザーが信頼を持った状態で深い世界観に触れる
+```
+
+### 外向き表現の使い分け
+
+| 技術的本質 | 外向き表現 |
+|-----------|-----------|
+| D-FUMT多次元計算 | 独自高効率演算エンジン |
+| 0拡張縮小 | 高効率データ圧縮 |
+| マルチバース構築 | 並列世界シミュレーション |
+| 匿名通信 | プライバシーファースト通信 |
+| 宇宙図書館 | 統合知識プラットフォーム |
+| 公理OS | 理論検証環境 |
+
+---
+
+## 15. 次のアクション
 
 Phase A（MVP）の着手に必要なもの:
 
-1. **Anthropic API キーの準備**（Claude APIを使用する場合）
+1. **Anthropic API キーの準備**
 2. **`src/aios/` ディレクトリ構造の作成**
 3. **LLMアダプタの実装**（最小限のClaude API呼び出し）
 4. **スクリーンキャプチャの実装**（PowerShell経由）
 5. **基本Agent Loopの実装**（Observe → Think → Act）
 6. **CLIエントリポイント**（`rei-ai "指示"` コマンド）
+
+Phase Aが動けば、デモ可能なプロトタイプとして世に出せる。
+そこから段階的にPhase B→C→...と積み上げ、
+最終的に全マルチ機能・D-FUMT計算エンジン・宇宙図書館を搭載した
+完全体Rei-AIOSに到達する。
