@@ -135,13 +135,32 @@ export class AgentLoop extends EventEmitter {
         this.emit('step:start', { step, maxSteps });
 
         // ─── 1. OBSERVE ──────────────────────────
-        this.log('  [Observe] Capturing screen state...');
-        const observation = await this.observer.observe();
-        const obsText = this.observer.describeObservation(observation);
-        this.log(`  [Observe] Active: ${observation.activeWindow}`);
-        this.log(`  [Observe] Windows: ${observation.windowList.length}`);
-        if (observation.errors.length > 0) {
-          this.log(`  [Observe] Warnings: ${observation.errors.join('; ')}`);
+        let observation: ScreenObservation;
+        let obsText: string;
+
+        if (this.config.dryRun && step > 1) {
+          // ドライランではステップ2以降の画面状態は変化しないため、
+          // 前ステップのアクション結果を仮定した観察結果を構築
+          const lastAction = history[history.length - 1]?.action || '';
+          observation = {
+            activeWindow: '(dry-run: assumed previous action succeeded)',
+            windowList: [],
+            timestamp: Date.now(),
+            errors: [],
+          };
+          obsText = `[DRY RUN MODE — Screen observation skipped]\n`
+            + `Previous action "${lastAction}" is assumed to have succeeded.\n`
+            + `Continue with the next logical step toward the goal.`;
+          this.log('  [Observe] Skipped (dry-run mode)');
+        } else {
+          this.log('  [Observe] Capturing screen state...');
+          observation = await this.observer.observe();
+          obsText = this.observer.describeObservation(observation);
+          this.log(`  [Observe] Active: ${observation.activeWindow}`);
+          this.log(`  [Observe] Windows: ${observation.windowList.length}`);
+          if (observation.errors.length > 0) {
+            this.log(`  [Observe] Warnings: ${observation.errors.join('; ')}`);
+          }
         }
 
         // ─── 2. THINK ───────────────────────────

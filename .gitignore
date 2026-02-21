@@ -64,3 +64,6 @@ templates/
 rei-api-keys.json
 rei-headless.pid
 logs/
+
+data/rei-aios/
+rei-aios.json

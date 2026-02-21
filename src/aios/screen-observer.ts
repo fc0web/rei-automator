@@ -8,7 +8,7 @@
  *   周囲 = UIツリー / OCR テキスト / ウィンドウ一覧
  */
 
-import { execSync, exec } from 'child_process';
+import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -76,10 +76,10 @@ public class Win32 {
 $hwnd = [Win32]::GetForegroundWindow()
 $sb = New-Object System.Text.StringBuilder 256
 [Win32]::GetWindowText($hwnd, $sb, 256) | Out-Null
-$pid = 0
-[Win32]::GetWindowThreadProcessId($hwnd, [ref]$pid) | Out-Null
-$proc = Get-Process -Id $pid -ErrorAction SilentlyContinue
-Write-Output "$($sb.ToString())|$($proc.ProcessName)|$pid"
+$procId = [uint32]0
+[Win32]::GetWindowThreadProcessId($hwnd, [ref]$procId) | Out-Null
+$proc = Get-Process -Id $procId -ErrorAction SilentlyContinue
+Write-Output "$($sb.ToString())|$($proc.ProcessName)|$procId"
 `;
 
 const PS_GET_WINDOW_LIST = `
@@ -111,8 +111,10 @@ if ($bmp.Width -gt $w) {
   $bmp = $resized
 }
 $bmp.Save("${outputPath.replace(/\\/g, '\\\\')}", [System.Drawing.Imaging.ImageFormat]::Png)
+$w2 = $bmp.Width
+$h2 = $bmp.Height
 $bmp.Dispose()
-Write-Output "$($bmp.Width)|$($bmp.Height)"
+Write-Output "$w2|$h2"
 `;
 
 // ─── ScreenObserver クラス ────────────────────────────
@@ -289,10 +291,18 @@ export class ScreenObserver {
 
   private runPowerShell(script: string): string {
     const timeout = this.config.timeoutMs || 10000;
-    return execSync(
-      `powershell -NoProfile -NonInteractive -Command "${script.replace(/"/g, '\\"').replace(/\n/g, '; ')}"`,
-      { encoding: 'utf-8', timeout, windowsHide: true }
-    );
+    // PowerShell の複数行スクリプトを一時 .ps1 ファイル経由で実行
+    // （インライン -Command ではヒア文字列や改行が壊れるため）
+    const tmpScript = path.join(this.tempDir, `ps_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.ps1`);
+    try {
+      fs.writeFileSync(tmpScript, script, 'utf-8');
+      return execSync(
+        `powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "${tmpScript}"`,
+        { encoding: 'utf-8', timeout, windowsHide: true }
+      );
+    } finally {
+      try { fs.unlinkSync(tmpScript); } catch { /* ignore */ }
+    }
   }
 
   private ensureDir(dir: string): void {
