@@ -1,8 +1,8 @@
-/**
- * Rei Automator — Daemon Process
- * Phase 9a+9b+9d: スケジューラ統合 + ファイル監視 + REST API + WebSocket + クラスタ
+﻿/**
+ * Rei Automator 窶・Daemon Process
+ * Phase 9a+9b+9d: 繧ｹ繧ｱ繧ｸ繝･繝ｼ繝ｩ邨ｱ蜷・+ 繝輔ぃ繧､繝ｫ逶｣隕・+ REST API + WebSocket + 繧ｯ繝ｩ繧ｹ繧ｿ
  *
- * ★ 既存の daemon.ts を置き換えてください。
+ * 笘・譌｢蟄倥・ daemon.ts 繧堤ｽｮ縺肴鋤縺医※縺上□縺輔＞縲・
  */
 
 import * as path from 'path';
@@ -13,13 +13,14 @@ import { parse } from '../lib/core/parser';
 import { ReiRuntime } from '../lib/core/runtime';
 import { AutoController } from '../lib/auto/controller';
 import { WindowsBackend } from '../lib/auto/windows-backend';
+import { WinApiBackend } from '../lib/auto/win-api-backend';
 import { Logger } from './logger';
 import { ScriptWatcher } from './watcher';
 import { ApiServer } from './api-server';
 import { NodeManager, NodeConfig } from './node-manager';
 import { TaskDispatcher, DispatchStrategy } from './task-dispatcher';
 
-// ─── 型定義 ──────────────────────────────────────────
+// 笏笏笏 蝙句ｮ夂ｾｩ 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
 
 export interface DaemonConfig {
   watchDir: string;
@@ -62,7 +63,7 @@ interface TaskQueueItem {
   addedAt: number;
 }
 
-// ─── Daemon クラス ───────────────────────────────────
+// 笏笏笏 Daemon 繧ｯ繝ｩ繧ｹ 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
 
 export class Daemon extends EventEmitter {
   private config: DaemonConfig;
@@ -89,19 +90,21 @@ export class Daemon extends EventEmitter {
     this.logger = logger;
   }
 
-  // ─── Runtime生成ヘルパー ─────────────────────────
+  // 笏笏笏 Runtime逕滓・繝倥Ν繝代・ 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
 
   private createRuntime(): ReiRuntime {
     const backend = new WindowsBackend((msg: string) => this.logger.debug(msg));
     const controller = new AutoController(backend);
     const runtime = new ReiRuntime(controller);
+    const winApi = new WinApiBackend((msg: string) => this.logger.debug(msg));
+    runtime.setWinApiBackend(winApi);
     if (this.config.executionMode === 'cursorless' && this.config.defaultWindow) {
       runtime.setExecutionMode('cursorless', this.config.defaultWindow);
     }
     return runtime;
   }
 
-  // ─── ライフサイクル ──────────────────────────────
+  // 笏笏笏 繝ｩ繧､繝輔し繧､繧ｯ繝ｫ 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
 
   async start(): Promise<void> {
     this.running = true;
@@ -163,7 +166,7 @@ export class Daemon extends EventEmitter {
     this.logger.info('Daemon stopped');
   }
 
-  // ─── クラスタ初期化 ─────────────────────────────
+  // 笏笏笏 繧ｯ繝ｩ繧ｹ繧ｿ蛻晄悄蛹・笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
 
   private initCluster(): void {
     const nodeConfig: Partial<NodeConfig> = {
@@ -198,11 +201,11 @@ export class Daemon extends EventEmitter {
     });
 
     this.taskDispatcher.on('dispatch:success', (result: any) => {
-      this.logger.info(`[Dispatch] Success: ${result.taskId} → ${result.targetNodeId} (${result.strategy})`);
+      this.logger.info(`[Dispatch] Success: ${result.taskId} 竊・${result.targetNodeId} (${result.strategy})`);
       this.emit('dispatch:success', result);
     });
     this.taskDispatcher.on('dispatch:error', (result: any) => {
-      this.logger.error(`[Dispatch] Error: ${result.taskId} → ${result.error}`);
+      this.logger.error(`[Dispatch] Error: ${result.taskId} 竊・${result.error}`);
       this.emit('dispatch:error', result);
     });
 
@@ -218,7 +221,7 @@ export class Daemon extends EventEmitter {
     }, 5000);
   }
 
-  // ─── 公開メソッド ─────────────────────────────────
+  // 笏笏笏 蜈ｬ髢九Γ繧ｽ繝・ラ 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
 
   getPublicStats(): any {
     const mem = process.memoryUsage();
@@ -301,7 +304,7 @@ export class Daemon extends EventEmitter {
     this.logger.info('Daemon reloaded');
   }
 
-  // ─── スクリプト管理 ──────────────────────────────
+  // 笏笏笏 繧ｹ繧ｯ繝ｪ繝励ヨ邂｡逅・笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
 
   private async loadExistingScripts(): Promise<void> {
     const files = fs.readdirSync(this.config.watchDir).filter(f => f.endsWith('.rei'));
@@ -328,7 +331,7 @@ export class Daemon extends EventEmitter {
     return null;
   }
 
-  // ─── スケジュール ────────────────────────────────
+  // 笏笏笏 繧ｹ繧ｱ繧ｸ繝･繝ｼ繝ｫ 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
 
   private startScheduledTasks(): void {
     for (const [, task] of this.tasks) { if (task.schedule) this.scheduleTask(task); }
@@ -357,7 +360,7 @@ export class Daemon extends EventEmitter {
     return value * (m[unit] || 0);
   }
 
-  // ─── タスクキュー ────────────────────────────────
+  // 笏笏笏 繧ｿ繧ｹ繧ｯ繧ｭ繝･繝ｼ 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
 
   private enqueueTask(taskId: string, scriptPath: string): void {
     try {
@@ -414,7 +417,7 @@ export class Daemon extends EventEmitter {
     this.processing = false;
   }
 
-  // ─── ファイル監視イベント ────────────────────────
+  // 笏笏笏 繝輔ぃ繧､繝ｫ逶｣隕悶う繝吶Φ繝・笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
 
   private onScriptAdded(filePath: string): void {
     const task = this.registerTask(filePath);
@@ -445,7 +448,7 @@ export class Daemon extends EventEmitter {
     }
   }
 
-  // ─── メインループ ────────────────────────────────
+  // 笏笏笏 繝｡繧､繝ｳ繝ｫ繝ｼ繝・笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
 
   private async mainLoop(): Promise<void> {
     while (this.running) {
@@ -454,7 +457,7 @@ export class Daemon extends EventEmitter {
       if (uptime > 0 && uptime % 3_600_000 < 1000) {
         const stats = this.getPublicStats();
         this.logger.info(
-          `Heartbeat — uptime: ${Math.floor(uptime / 3_600_000)}h, ` +
+          `Heartbeat 窶・uptime: ${Math.floor(uptime / 3_600_000)}h, ` +
           `tasks: ${stats.activeTasks} active / ${stats.completedTasks} completed / ${stats.errorTasks} errors, ` +
           `memory: ${stats.memoryMB.toFixed(1)}MB` +
           (stats.cluster.enabled ? `, cluster: ${stats.cluster.onlineNodes} nodes, role: ${stats.cluster.role}` : '')
@@ -463,9 +466,11 @@ export class Daemon extends EventEmitter {
     }
   }
 
-  // ─── ヘルパー ────────────────────────────────────
+  // 笏笏笏 繝倥Ν繝代・ 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
 
   private taskId(scriptPath: string): string { return path.resolve(scriptPath).toLowerCase().replace(/\\/g, '/'); }
   private ensureDir(dir: string): void { if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true }); }
   private delay(ms: number): Promise<void> { return new Promise(resolve => setTimeout(resolve, ms)); }
 }
+
+

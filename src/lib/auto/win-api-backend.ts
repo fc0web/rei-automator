@@ -1,17 +1,21 @@
 /**
  * Rei Automator - Windows API バックエンド（カーソルなし実行）
  * 
- * SendMessage / PostMessage を使い、カーソルを動かさずにウィンドウを操作する。
- * VPS（RDP切断後）でも動作可能。
+ * Phase 9g: UIAutomation + SendInput 方式に再設計
+ * 
+ * テキスト入力の3段フォールバック:
+ *   1. UIAutomation ValuePattern — フォーカス不要・カーソル不要・WinUI3対応
+ *   2. SendInput API — 物理入力シミュレーション・WinUI3対応（要フォーカス）
+ *   3. WM_CHAR PostMessage — レガシー Win32 アプリ用フォールバック
  * 
  * 利点:
  *   - カーソルを動かさない → 他の作業と干渉しない
  *   - RDP切断後も動作 → VPS対応
- *   - 複数ウィンドウへの並列操作が可能 → マルチタスクの基盤
+ *   - デーモン経由でもテキスト入力可能
+ *   - Win11 WinUI3 アプリ（メモ帳等）に対応
  * 
  * 制約:
  *   - Windows専用
- *   - 一部アプリはSendMessageに応答しない場合がある
  *   - DirectX/ゲーム系は別途対応が必要
  */
 
@@ -81,6 +85,50 @@ public class ReiWinApi {
 
     [DllImport("user32.dll")]
     static extern bool ClientToScreen(IntPtr hWnd, ref POINT lpPoint);
+
+    // ── フォーカス強制取得用 ──────────────────
+    [DllImport("user32.dll")]
+    static extern uint GetWindowThreadProcessId(IntPtr hWnd, IntPtr lpdwProcessId);
+
+    [DllImport("kernel32.dll")]
+    static extern uint GetCurrentThreadId();
+
+    [DllImport("user32.dll")]
+    static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
+
+    [DllImport("user32.dll")]
+    static extern bool AllowSetForegroundWindow(int dwProcessId);
+
+    [DllImport("user32.dll")]
+    static extern bool BringWindowToTop(IntPtr hWnd);
+
+    // ── SendInput API ─────────────────────────
+    [DllImport("user32.dll", SetLastError = true)]
+    static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct INPUT {
+        public uint type;
+        public INPUTUNION u;
+    }
+
+    [StructLayout(LayoutKind.Explicit)]
+    public struct INPUTUNION {
+        [FieldOffset(0)] public KEYBDINPUT ki;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct KEYBDINPUT {
+        public ushort wVk;
+        public ushort wScan;
+        public uint dwFlags;
+        public uint time;
+        public IntPtr dwExtraInfo;
+    }
+
+    const uint INPUT_KEYBOARD = 1;
+    const uint KEYEVENTF_UNICODE = 0x0004;
+    const uint KEYEVENTF_KEYUP = 0x0002;
 
     [StructLayout(LayoutKind.Sequential)]
     public struct RECT {
@@ -191,7 +239,7 @@ public class ReiWinApi {
         return true;
     }
 
-    // ── カーソルなしテキスト入力 ──────────────
+    // ── カーソルなしテキスト入力（レガシー WM_CHAR）──
     public static bool TypeText(IntPtr hWnd, string text) {
         if (hWnd == IntPtr.Zero) return false;
         foreach (char c in text) {
@@ -199,6 +247,44 @@ public class ReiWinApi {
             Thread.Sleep(10);
         }
         return true;
+    }
+
+    // ── SendInput によるUnicode文字入力 ───────
+    // フォーカスウィンドウに対して物理キーボード入力をシミュレート
+    // WinUI3 を含むすべてのアプリで動作する
+    public static bool TypeViaSendInput(string text) {
+        var inputs = new List<INPUT>();
+        foreach (char c in text) {
+            // KeyDown
+            inputs.Add(new INPUT {
+                type = INPUT_KEYBOARD,
+                u = new INPUTUNION {
+                    ki = new KEYBDINPUT {
+                        wVk = 0,
+                        wScan = (ushort)c,
+                        dwFlags = KEYEVENTF_UNICODE,
+                        time = 0,
+                        dwExtraInfo = IntPtr.Zero
+                    }
+                }
+            });
+            // KeyUp
+            inputs.Add(new INPUT {
+                type = INPUT_KEYBOARD,
+                u = new INPUTUNION {
+                    ki = new KEYBDINPUT {
+                        wVk = 0,
+                        wScan = (ushort)c,
+                        dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP,
+                        time = 0,
+                        dwExtraInfo = IntPtr.Zero
+                    }
+                }
+            });
+        }
+        var inputArray = inputs.ToArray();
+        uint sent = SendInput((uint)inputArray.Length, inputArray, Marshal.SizeOf(typeof(INPUT)));
+        return sent == inputArray.Length;
     }
 
     // ── カーソルなしキー送信 ──────────────────
@@ -215,6 +301,35 @@ public class ReiWinApi {
         if (hWnd == IntPtr.Zero) return false;
         ShowWindow(hWnd, SW_RESTORE);
         return SetForegroundWindow(hWnd);
+    }
+
+    // ── 強制フォーカス取得（デーモン対応）─────
+    // AttachThreadInput でスレッドを接続し、フォアグラウンド権限を得る
+    public static bool ForceActivate(IntPtr hWnd) {
+        if (hWnd == IntPtr.Zero) return false;
+        
+        IntPtr foreground = GetForegroundWindow();
+        uint foreThread = GetWindowThreadProcessId(foreground, IntPtr.Zero);
+        uint curThread = GetCurrentThreadId();
+        uint targetThread = GetWindowThreadProcessId(hWnd, IntPtr.Zero);
+        
+        bool attached = false;
+        try {
+            // 現在のフォアグラウンドスレッドに接続
+            if (foreThread != curThread) {
+                attached = AttachThreadInput(curThread, foreThread, true);
+            }
+            
+            ShowWindow(hWnd, SW_RESTORE);
+            BringWindowToTop(hWnd);
+            SetForegroundWindow(hWnd);
+            
+            return true;
+        } finally {
+            if (attached) {
+                AttachThreadInput(curThread, foreThread, false);
+            }
+        }
     }
 
     public static bool Close(IntPtr hWnd) {
@@ -247,6 +362,76 @@ public class ReiWinApi {
 }
 '@ -ReferencedAssemblies System.Windows.Forms
 `;
+
+// ── UIAutomation PowerShell スニペット ──────────────────
+// フォーカス不要・カーソル不要でテキストを設定する
+// Win11 WinUI3 アプリ（メモ帳等）に対応
+
+const UIA_TYPE_SCRIPT = (hwnd: number, text: string): string => {
+  const escapedText = text.replace(/'/g, "''").replace(/\\/g, '\\\\');
+  return `
+Add-Type -AssemblyName UIAutomationClient
+Add-Type -AssemblyName UIAutomationTypes
+
+$hwnd = [IntPtr]${hwnd}
+$text = '${escapedText}'
+
+try {
+    $ae = [System.Windows.Automation.AutomationElement]::FromHandle($hwnd)
+
+    # 方式A: ウィンドウ直下のValuePatternを探す（多くのエディタ）
+    $vpCond = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::IsValuePatternAvailableProperty, $true
+    )
+    $editEl = $ae.FindFirst(
+        [System.Windows.Automation.TreeScope]::Descendants, $vpCond
+    )
+
+    if ($editEl -ne $null) {
+        $vp = $editEl.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern)
+        # 現在値の末尾に追加（SetValueは置換なので既存値を取得して連結）
+        try {
+            $current = $vp.Current.Value
+        } catch {
+            $current = ''
+        }
+        $vp.SetValue($current + $text)
+        Write-Output 'UIA_VALUE_OK'
+    } else {
+        # 方式B: TextPatternを探す（リッチエディタ等）
+        # TextPattern は読み取り専用の場合が多いので、ValuePattern 失敗時の情報提供用
+        Write-Output 'UIA_NO_PATTERN'
+    }
+} catch {
+    Write-Output "UIA_ERROR:$($_.Exception.Message)"
+}
+`;
+};
+
+// ── SendInput PowerShell スニペット ─────────────────────
+// ForceActivate でフォーカスを奪い、SendInput で Unicode 入力
+// UIAutomation 失敗時のフォールバック
+
+const SENDINPUT_TYPE_SCRIPT = (hwnd: number, text: string): string => {
+  const escapedText = text.replace(/'/g, "''").replace(/\\/g, '\\\\');
+  return `
+${WIN_API_HELPER}
+$hwnd = [IntPtr]${hwnd}
+$text = '${escapedText}'
+
+# ForceActivate でフォーカスを確実に取得
+[ReiWinApi]::ForceActivate($hwnd)
+Start-Sleep -Milliseconds 150
+
+# SendInput で Unicode 文字を直接入力
+$result = [ReiWinApi]::TypeViaSendInput($text)
+if ($result) {
+    Write-Output 'SENDINPUT_OK'
+} else {
+    Write-Output 'SENDINPUT_FAIL'
+}
+`;
+};
 
 // ── Virtual Key Code マッピング ──────────────────────────
 
@@ -285,6 +470,10 @@ const VK_MAP: Record<string, number> = {
   '5': 0x35, '6': 0x36, '7': 0x37, '8': 0x38, '9': 0x39,
 };
 
+// ── テキスト入力方式 ────────────────────────────────────
+
+export type TypeMethod = 'uia' | 'sendinput' | 'wm_char' | 'auto';
+
 // ── PowerShell実行ヘルパー ───────────────────────────────
 
 function runPowerShell(script: string): Promise<string> {
@@ -294,7 +483,7 @@ function runPowerShell(script: string): Promise<string> {
       '-NonInteractive',
       '-ExecutionPolicy', 'Bypass',
       '-Command', script,
-    ], { timeout: 15000 }, (error, stdout, stderr) => {
+    ], { timeout: 15000, windowsHide: true }, (error, stdout, stderr) => {
       if (error) {
         reject(new Error(`PowerShell error: ${error.message}\n${stderr}`));
       } else {
@@ -316,6 +505,9 @@ export interface WindowInfo {
 
 export class WinApiBackend {
   private logger: (message: string) => void;
+
+  /** デフォルトのテキスト入力方式。'auto' は UIAutomation → SendInput → WM_CHAR の順に試行 */
+  public defaultTypeMethod: TypeMethod = 'auto';
 
   constructor(logger?: (message: string) => void) {
     this.logger = logger || ((msg) => console.log(`[WinAPI] ${msg}`));
@@ -404,19 +596,110 @@ export class WinApiBackend {
   }
 
   /**
-   * カーソルなしテキスト入力
+   * テキスト入力 — 3段フォールバック方式
+   * 
+   * 入力方式（method パラメータで指定可能、デフォルト 'auto'）:
+   *   'auto'      — UIAutomation → SendInput → WM_CHAR の順に試行
+   *   'uia'       — UIAutomation ValuePattern のみ
+   *   'sendinput'  — SendInput API のみ（要フォーカス）
+   *   'wm_char'   — WM_CHAR PostMessage のみ（レガシー）
+   * 
+   * @param hwndOrTitle ウィンドウハンドル or タイトル（部分一致）
+   * @param text 入力するテキスト
+   * @param method 入力方式（省略時は defaultTypeMethod を使用）
    */
-  async type(hwndOrTitle: number | string, text: string): Promise<void> {
+  async type(hwndOrTitle: number | string, text: string, method?: TypeMethod): Promise<void> {
+    const resolvedMethod = method || this.defaultTypeMethod;
     const hwnd = typeof hwndOrTitle === 'string'
       ? await this.findWindow(hwndOrTitle) : hwndOrTitle;
-    this.logger(`[カーソルなし] Type: "${text}" → hwnd=${hwnd}`);
-    const escaped = text.replace(/'/g, "''");
+
+    this.logger(`[Type] "${text}" → hwnd=${hwnd} (method=${resolvedMethod})`);
+
+    if (resolvedMethod === 'uia') {
+      await this.typeViaUIA(hwnd, text);
+      return;
+    }
+
+    if (resolvedMethod === 'sendinput') {
+      await this.typeViaSendInput(hwnd, text);
+      return;
+    }
+
+    if (resolvedMethod === 'wm_char') {
+      await this.typeViaWmChar(hwnd, text);
+      return;
+    }
+
+    // ── auto: 3段フォールバック ──
+    // 1. UIAutomation（フォーカス不要・カーソル不要）
+    this.logger('[Type:auto] 方式1: UIAutomation ValuePattern を試行');
+    try {
+      const uiaResult = await runPowerShell(UIA_TYPE_SCRIPT(hwnd, text));
+      if (uiaResult === 'UIA_VALUE_OK') {
+        this.logger('[Type:auto] UIAutomation 成功');
+        return;
+      }
+      this.logger(`[Type:auto] UIAutomation 不可: ${uiaResult}`);
+    } catch (err: any) {
+      this.logger(`[Type:auto] UIAutomation エラー: ${err.message}`);
+    }
+
+    // 2. SendInput（ForceActivate + Unicode入力）
+    this.logger('[Type:auto] 方式2: SendInput (ForceActivate) を試行');
+    try {
+      const siResult = await runPowerShell(SENDINPUT_TYPE_SCRIPT(hwnd, text));
+      if (siResult === 'SENDINPUT_OK') {
+        this.logger('[Type:auto] SendInput 成功');
+        return;
+      }
+      this.logger(`[Type:auto] SendInput 不可: ${siResult}`);
+    } catch (err: any) {
+      this.logger(`[Type:auto] SendInput エラー: ${err.message}`);
+    }
+
+    // 3. WM_CHAR フォールバック（レガシー Win32 アプリ用）
+    this.logger('[Type:auto] 方式3: WM_CHAR PostMessage フォールバック');
+    await this.typeViaWmChar(hwnd, text);
+  }
+
+  /**
+   * UIAutomation ValuePattern でテキストを設定
+   * フォーカス不要・カーソル不要・Win11 WinUI3 対応
+   */
+  private async typeViaUIA(hwnd: number, text: string): Promise<void> {
+    const result = await runPowerShell(UIA_TYPE_SCRIPT(hwnd, text));
+    if (result === 'UIA_VALUE_OK') {
+      this.logger('[Type:UIA] 成功');
+      return;
+    }
+    throw new Error(`UIAutomation 失敗: ${result}`);
+  }
+
+  /**
+   * SendInput API でテキストを入力
+   * ForceActivate でフォーカスを奪い、Unicode文字を物理入力としてシミュレート
+   */
+  private async typeViaSendInput(hwnd: number, text: string): Promise<void> {
+    const result = await runPowerShell(SENDINPUT_TYPE_SCRIPT(hwnd, text));
+    if (result === 'SENDINPUT_OK') {
+      this.logger('[Type:SendInput] 成功');
+      return;
+    }
+    throw new Error(`SendInput 失敗: ${result}`);
+  }
+
+  /**
+   * WM_CHAR PostMessage でテキストを入力（レガシー方式）
+   * Win32クラシックアプリでは動作するが、WinUI3には届かない
+   */
+  private async typeViaWmChar(hwnd: number, text: string): Promise<void> {
     const result = await runPowerShell(
-      `${WIN_API_HELPER}\n[ReiWinApi]::TypeText([IntPtr]${hwnd}, '${escaped}')`
+      `${WIN_API_HELPER}\n[ReiWinApi]::TypeText([IntPtr]${hwnd}, '${text.replace(/'/g, "''")}')`
     );
     if (result === 'False') {
-      throw new Error(`テキスト入力失敗: hwnd=${hwnd}`);
+      throw new Error(`WM_CHAR テキスト入力失敗: hwnd=${hwnd}`);
     }
+    this.logger('[Type:WM_CHAR] 成功');
   }
 
   /**
@@ -457,7 +740,7 @@ export class WinApiBackend {
     const script = vkCodes.map(vk =>
       `PostMessage([IntPtr]${hwnd}, 0x0100, [IntPtr]${vk}, [IntPtr]0)`
     ).join('\n') + '\nStart-Sleep -Milliseconds 30\n' +
-    vkCodes.reverse().map(vk =>
+    [...vkCodes].reverse().map(vk =>
       `PostMessage([IntPtr]${hwnd}, 0x0101, [IntPtr]${vk}, [IntPtr]0)`
     ).join('\n');
 
@@ -468,13 +751,14 @@ export class WinApiBackend {
 
   /**
    * ウィンドウをアクティブにする
+   * デーモン対応: ForceActivate（AttachThreadInput方式）優先
    */
   async activate(hwndOrTitle: number | string): Promise<void> {
     const hwnd = typeof hwndOrTitle === 'string'
       ? await this.findWindow(hwndOrTitle) : hwndOrTitle;
-    this.logger(`ウィンドウアクティブ化: hwnd=${hwnd}`);
+    this.logger(`ウィンドウアクティブ化 (ForceActivate): hwnd=${hwnd}`);
     await runPowerShell(
-      `${WIN_API_HELPER}\n[ReiWinApi]::Activate([IntPtr]${hwnd})`
+      `${WIN_API_HELPER}\n[ReiWinApi]::ForceActivate([IntPtr]${hwnd})`
     );
   }
 
