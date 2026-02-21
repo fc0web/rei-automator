@@ -17,6 +17,8 @@
         "start:stub": "electron . --stub",
 "start:headless": "node dist/headless/cli.js daemon",
 "start:headless:dev": "npm run build:main && node dist/headless/cli.js daemon",
+"rei-ai": "node dist/aios/agent-cli.js",
+"rei-ai:dev": "npm run build:main && node dist/aios/agent-cli.js",
         "package": "npm run build && electron-builder --config electron-builder.config.js --win portable",
         "test": "jest",
         "lint": "eslint src --ext .ts",

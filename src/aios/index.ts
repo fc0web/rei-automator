@@ -26,3 +26,13 @@ export { AIOSEngine, AIOSConfig, ChatRequest, ChatResponse } from './aios-engine
 
 // REST APIルート
 export { createAIOSRoutes } from './aios-routes';
+
+// Phase A: Agent Loop（Observe → Think → Act）
+export { AgentLoop, AgentLoopConfig, AgentLoopResult } from './agent-loop';
+export { ScreenObserver, ScreenObservation, ScreenObserverConfig, WindowInfo } from './screen-observer';
+export { ActionExecutor, ActionResult, ActionExecutorConfig } from './action-executor';
+export {
+  AgentResponse, AgentContext, StepRecord,
+  buildAgentSystemPrompt, buildStepPrompt, buildPlanPrompt,
+  parseAgentResponse, REI_COMMAND_REFERENCE,
+} from './agent-prompts';

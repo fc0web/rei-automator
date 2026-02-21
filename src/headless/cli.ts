@@ -99,6 +99,13 @@ async function main(): Promise<void> {
         await handleList(config, logger);
         break;
 
+      case 'ai':
+        // Phase A: AIエージェントモードへ委譲
+        console.log('Launching Rei AI Agent...');
+        console.log('Use: npm run rei-ai -- "your instruction"');
+        console.log('Or:  node dist/aios/agent-cli.js "your instruction"');
+        break;
+
       default:
         // 引数がファイルパスならrunとして扱う
         if (command.endsWith('.rei')) {
