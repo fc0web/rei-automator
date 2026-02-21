@@ -19,6 +19,10 @@ import { ScriptWatcher } from './watcher';
 import { ApiServer } from './api-server';
 import { NodeManager, NodeConfig } from './node-manager';
 import { TaskDispatcher, DispatchStrategy } from './task-dispatcher';
+import { VpsIntegration, VpsConfig } from './vps-integration';
+import { TlsConfig } from './tls-manager';
+import { TunnelConfig } from './tunnel-client';
+import { RdpKeepaliveConfig } from './rdp-keepalive';
 
 // 笏笏笏 蝙句ｮ夂ｾｩ 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
 
@@ -40,6 +44,10 @@ export interface DaemonConfig {
   heartbeatInterval?: number;
   heartbeatTimeout?: number;
   dispatchStrategy?: DispatchStrategy;
+  // Phase E: VPS統合
+  tls?: Partial<TlsConfig>;
+  tunnel?: Partial<TunnelConfig>;
+  rdpKeepalive?: Partial<RdpKeepaliveConfig>;
 }
 
 export interface TaskEntry {
@@ -83,6 +91,7 @@ export class Daemon extends EventEmitter {
   private nodeManager?: NodeManager;
   private taskDispatcher?: TaskDispatcher;
   private statsUpdateTimer?: NodeJS.Timeout;
+  private vpsIntegration?: VpsIntegration;
 
   constructor(config: DaemonConfig, logger: Logger) {
     super();
@@ -128,6 +137,24 @@ export class Daemon extends EventEmitter {
       this.initCluster();
     }
 
+    // Phase E: VPS統合（TLS・トンネル・RDP keepalive）
+    let tlsOptions: { cert: string; key: string } | null = null;
+    if (this.config.tls?.enabled || this.config.tunnel?.enabled || this.config.rdpKeepalive?.enabled) {
+      this.vpsIntegration = new VpsIntegration({
+        tls: this.config.tls,
+        tunnel: this.config.tunnel,
+        rdpKeepalive: this.config.rdpKeepalive,
+      } as VpsConfig, this.logger);
+      this.vpsIntegration.on('rdp:disconnected', () => {
+        this.logger.warn('[Daemon] RDP disconnected — continuing in cursorless mode');
+      });
+      this.vpsIntegration.on('tunnel:connected', (info: any) => {
+        this.logger.info(`[Daemon] Secure tunnel connected: ${JSON.stringify(info)}`);
+      });
+      await this.vpsIntegration.start();
+      tlsOptions = this.vpsIntegration.getTlsOptions();
+    }
+
     this.apiServer = new ApiServer(this, {
       port: this.config.healthPort,
       host: this.config.apiHost || '0.0.0.0',
@@ -135,6 +162,7 @@ export class Daemon extends EventEmitter {
         enabled: this.config.authEnabled ?? true,
         keyFilePath: this.config.apiKeyFilePath,
       },
+      tlsOptions: tlsOptions ?? undefined,
     }, this.logger);
     await this.apiServer.start();
 
@@ -160,6 +188,7 @@ export class Daemon extends EventEmitter {
 
     if (this.statsUpdateTimer) { clearInterval(this.statsUpdateTimer); }
     if (this.nodeManager) { await this.nodeManager.stop(); }
+    if (this.vpsIntegration) { await this.vpsIntegration.stop(); }
     if (this.watcher) { this.watcher.stop(); }
     if (this.apiServer) { await this.apiServer.stop(); }
 

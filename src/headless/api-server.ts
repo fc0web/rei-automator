@@ -6,6 +6,7 @@
  */
 
 import * as http from 'http';
+import * as https from 'https';
 import { Logger } from './logger';
 import { ApiAuth, AuthConfig } from './api-auth';
 import { ApiRoutes } from './api-routes';
@@ -21,6 +22,7 @@ export interface ApiServerConfig {
   port: number;
   host: string;
   auth: Partial<AuthConfig>;
+  tlsOptions?: { cert: string; key: string };
 }
 
 const DEFAULT_API_CONFIG: ApiServerConfig = {
@@ -74,21 +76,34 @@ export class ApiServer {
 
   async start(): Promise<void> {
     return new Promise((resolve, reject) => {
-      this.server = http.createServer(async (req, res) => {
+      const requestHandler = async (req: http.IncomingMessage, res: http.ServerResponse) => {
         await this.handleRequest(req, res);
-      });
+      };
+
+      const isHttps = !!this.config.tlsOptions;
+      if (isHttps) {
+        this.server = https.createServer(
+          { cert: this.config.tlsOptions!.cert, key: this.config.tlsOptions!.key },
+          requestHandler
+        ) as unknown as http.Server;
+      } else {
+        this.server = http.createServer(requestHandler);
+      }
+
+      const proto = isHttps ? 'https' : 'http';
+      const wsProto = isHttps ? 'wss' : 'ws';
 
       this.wsManager.attach(this.server);
 
       this.server.listen(this.config.port, this.config.host, () => {
-        this.logger.info(`API server listening on ${this.config.host}:${this.config.port}`);
-        this.logger.info(`  Dashboard: http://localhost:${this.config.port}/dashboard`);
-        this.logger.info(`  REST API:  http://localhost:${this.config.port}/api/`);
-        this.logger.info(`  WebSocket: ws://localhost:${this.config.port}/ws`);
-        this.logger.info(`  Health:    http://localhost:${this.config.port}/health`);
+        this.logger.info(`API server listening on ${this.config.host}:${this.config.port} [${proto.toUpperCase()}]`);
+        this.logger.info(`  Dashboard: ${proto}://localhost:${this.config.port}/dashboard`);
+        this.logger.info(`  REST API:  ${proto}://localhost:${this.config.port}/api/`);
+        this.logger.info(`  WebSocket: ${wsProto}://localhost:${this.config.port}/ws`);
+        this.logger.info(`  Health:    ${proto}://localhost:${this.config.port}/health`);
         if (this.clusterRoutes.length > 0) {
-          this.logger.info(`  Cluster:   http://localhost:${this.config.port}/api/cluster/`);
-          this.logger.info(`  Dispatch:  http://localhost:${this.config.port}/api/dispatch`);
+          this.logger.info(`  Cluster:   ${proto}://localhost:${this.config.port}/api/cluster/`);
+          this.logger.info(`  Dispatch:  ${proto}://localhost:${this.config.port}/api/dispatch`);
         }
         resolve();
       });

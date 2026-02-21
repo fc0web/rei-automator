@@ -42,6 +42,10 @@ export interface HeadlessConfig {
   retryDelayMs: number;
   executionMode: 'cursor' | 'cursorless';
   defaultWindow?: string;
+  // Phase E: VPS統合
+  tls?: any;
+  tunnel?: any;
+  rdpKeepalive?: any;
 }
 
 const DEFAULT_CONFIG: HeadlessConfig = {
@@ -194,6 +198,10 @@ async function handleDaemon(
     retryDelayMs: config.retryDelayMs,
     executionMode: config.executionMode,
     defaultWindow: config.defaultWindow,
+    // Phase E: VPS統合
+    tls: config.tls,
+    tunnel: config.tunnel,
+    rdpKeepalive: config.rdpKeepalive,
   };
 
   const daemon = new Daemon(daemonConfig, logger);
