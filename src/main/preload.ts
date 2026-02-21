@@ -188,3 +188,6 @@ contextBridge.exposeInMainWorld('reiAPI', {
   setExecutionMode: (mode: string, targetWindow?: string) =>
     ipcRenderer.invoke('exec:set-mode', mode, targetWindow),
 });
+
+// ── AIOS API ブリッジ ──
+import './preload-aios-additions';

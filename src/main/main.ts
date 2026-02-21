@@ -13,6 +13,9 @@ import { convertJapaneseToRei, convertWithClaudeAPI } from '../lib/core/converte
 import { ImageMatcher } from '../lib/auto/image-matcher';
 // ── i18n ──
 import i18n, { t } from '../i18n';
+// ── AIOS ──
+import { AIOSEngine } from '../aios/aios-engine';
+import { registerAIOSHandlers } from './main-aios-additions';
 
 let mainWindow: BrowserWindow | null = null;
 let executor: ReiExecutor | null = null;
@@ -29,7 +32,7 @@ function createMainWindow(): void {
     height: 700,
     minWidth: 800,
     minHeight: 600,
-    title: `Rei Automator v0.4`,
+    title: `Rei Automator v0.5`,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -354,6 +357,24 @@ function setupApplicationMenu(): void {
         { label: t('menu.tools.uwscConvert'), click: () => mainWindow?.webContents.send('menu-action', 'uwsc-convert') },
         { type: 'separator' },
         {
+          label: 'AI Assistant',
+          accelerator: 'CmdOrCtrl+Shift+A',
+          click: () => {
+            const assistantWindow = new BrowserWindow({
+              width: 1000,
+              height: 700,
+              title: 'Rei AIOS — AI Assistant',
+              webPreferences: {
+                nodeIntegration: false,
+                contextIsolation: true,
+                preload: path.join(__dirname, 'preload.js'),
+              },
+            });
+            assistantWindow.loadFile(path.join(__dirname, '../renderer/assistant.html'));
+          },
+        },
+        { type: 'separator' },
+        {
           label: t('menu.tools.language'),
           submenu: i18n.getSupportedLanguages().map(lang => ({
             label: `${lang.nativeName} (${lang.name})`,
@@ -385,7 +406,7 @@ function setupApplicationMenu(): void {
           dialog.showMessageBox(mainWindow!, {
             type: 'info',
             title: t('about.title'),
-            message: t('about.version', { version: '0.4.0' }),
+            message: t('about.version', { version: '0.5.0' }),
             detail: `${t('about.description')}\n\n${t('about.author')}\n${t('about.license')}`,
             buttons: ['OK']
           });
@@ -414,6 +435,12 @@ app.whenReady().then(() => {
   // Phase 4: ImageMatcher 初期化
   const templatesDir = path.join(app.getAppPath(), '..', 'templates');
   imageMatcher = new ImageMatcher(templatesDir);
+
+  // ── AIOS Engine 初期化 ──
+  const aiosEngine = new AIOSEngine({
+    dataDir: path.join(app.getPath('userData'), 'aios'),
+  });
+  registerAIOSHandlers(aiosEngine);
 
   // ========== Phase 6 ==========
   const { ScriptManager } = require('../lib/core/script-manager');
