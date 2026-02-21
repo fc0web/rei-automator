@@ -1,6 +1,6 @@
 /**
  * Rei Automator — Headless Module
- * Phase 9a + 9b + 9d exports
+ * Phase 9a + 9b + 9d + Phase E exports
  *
  * ★ 既存の index.ts を置き換えてください。
  */
@@ -24,3 +24,9 @@ export { WsManager, WsChannel, WsMessage } from './ws-manager';
 export { NodeManager, NodeInfo, NodeStats, NodeConfig, ClusterState } from './node-manager';
 export { TaskDispatcher, DispatchStrategy, DispatchResult, DispatchOptions, DispatcherConfig } from './task-dispatcher';
 export { createClusterRoutes } from './cluster-routes';
+
+// Phase E: VPS運用・セキュア通信
+export { TlsManager, TlsConfig } from './tls-manager';
+export { TunnelClient, TunnelConfig } from './tunnel-client';
+export { RdpKeepalive, RdpKeepaliveConfig } from './rdp-keepalive';
+export { VpsIntegration, VpsConfig, VpsStatus } from './vps-integration';
